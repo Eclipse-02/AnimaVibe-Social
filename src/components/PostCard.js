@@ -1,18 +1,29 @@
 import React from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native'
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native'
+import { Image } from 'expo-image'
 
 export default function PostCard({ post }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Image source={{ uri: post.userPhoto }} style={styles.avatar} />
+        <Image 
+          source={{ uri: post.userPhoto }} 
+          style={styles.avatar} 
+          cachePolicy="disk" 
+        />
         <View style={styles.headerText}>
           <Text style={styles.username}>{post.username}</Text>
           <Text style={styles.time}>{post.timeAgo}</Text>
         </View>
       </View>
 
-      <Image source={{ uri: post.imageUrl }} style={styles.feedImage} />
+      <Image 
+        source={{ uri: post.imageUrl }} 
+        style={styles.feedImage} 
+        cachePolicy="disk"
+        transition={300}
+        contentFit="cover"
+      />
 
       <View style={styles.actions}>
         <TouchableOpacity style={styles.btn}>
@@ -66,7 +77,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 300,
     borderRadius: 8,
-    resizeMode: 'cover',
   },
   actions: {
     flexDirection: 'row',
@@ -89,5 +99,5 @@ const styles = StyleSheet.create({
   },
   boldUser: {
     fontWeight: 'bold',
-  },
+  }
 })

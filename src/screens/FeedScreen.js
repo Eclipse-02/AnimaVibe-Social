@@ -53,6 +53,10 @@ export default function FeedScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => <PostCard post={item} />}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        initialNumToRender={4}
       />
     </SafeAreaView>
   )
@@ -62,5 +66,5 @@ const styles = StyleSheet.create({
   bg: {
     flex: 1,
     backgroundColor: '#000000',
-  },
+  }
 })
