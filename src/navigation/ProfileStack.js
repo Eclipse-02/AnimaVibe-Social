@@ -1,14 +1,13 @@
 import React from 'react'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import { ProfileScreen, EditProfileScreen } from '../screens/PlaceholderScreens'
+import { createStackNavigator } from '@react-navigation/stack'
+import ProfileScreen from '../screens/ProfileScreen'
 
-const Stack = createNativeStackNavigator()
+const Stack = createStackNavigator()
 
 export default function ProfileStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
-      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
     </Stack.Navigator>
   )
 }
