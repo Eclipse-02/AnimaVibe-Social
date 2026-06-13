@@ -1,27 +1,31 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
+import { useSafeAreaInsets } from 'react-native-safe-area-context' 
 import FeedStack from './FeedStack'
 import ProfileStack from './ProfileStack'
 import DiscoveryScreen from '../screens/DiscoveryScreen'
 import NotificationsScreen from '../screens/NotificationsScreen'
-import { CreatePostScreen } from '../screens/PlaceholderScreens'
+import CreatePostScreen from '../screens/CreatePostScreen'
 
 const Tab = createBottomTabNavigator()
 
 export default function MainTabs() {
+  const insets = useSafeAreaInsets() 
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarActiveTintColor: '#ffffff',
+        tabBarInactiveTintColor: '#555555',
         tabBarStyle: {
           backgroundColor: '#000000',
           borderTopColor: '#222222',
-          height: 60,
-          paddingBottom: 10
+          height: 50 + (insets.bottom > 0 ? insets.bottom : 12),
+          paddingBottom: insets.bottom > 0 ? insets.bottom - 4 : 12,
+          paddingTop: 8,
         },
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#555555',
         tabBarIcon: ({ focused, color, size }) => {
           let iconName
           if (route.name === 'FeedTab') iconName = focused ? 'home' : 'home-outline'
