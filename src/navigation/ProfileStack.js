@@ -1,8 +1,8 @@
 import React from 'react'
-import { createStackNavigator } from '@react-navigation/stack'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import ProfileScreen from '../screens/ProfileScreen'
 
-const Stack = createStackNavigator()
+const Stack = createNativeStackNavigator()
 
 export default function ProfileStack() {
   return (
