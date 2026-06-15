@@ -5,8 +5,8 @@ import {
   sendPasswordResetEmail,
   updateProfile,
 } from 'firebase/auth'
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { auth, db } from '../config/firebase'
+import { auth } from '../config/firebase'
+import { createUserProfile, getUserProfile } from './users'
 
 export async function registerWithEmail(email, password, displayName) {
   const userCredential = await createUserWithEmailAndPassword(
@@ -23,14 +23,11 @@ export async function registerWithEmail(email, password, displayName) {
     })
   }
 
-  await setDoc(doc(db, 'users', user.uid), {
-    uid: user.uid,
+  await createUserProfile(user.uid, {
     email: user.email,
     displayName: displayName || '',
     photoURL: user.photoURL || '',
     provider: 'password',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
   })
 
   return user
@@ -54,16 +51,4 @@ export async function resetPassword(email) {
   await sendPasswordResetEmail(auth, email)
 }
 
-export async function getUserProfile(uid) {
-  const userRef = doc(db, 'users', uid)
-  const userSnap = await getDoc(userRef)
-
-  if (!userSnap.exists()) {
-    return null
-  }
-
-  return {
-    id: userSnap.id,
-    ...userSnap.data(),
-  }
-}
+export { getUserProfile }

@@ -1,9 +1,9 @@
 import React, { useState } from 'react'
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import { db, storage, auth } from '../config/firebase'
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore'
+import { storage, auth } from '../config/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { createPost } from '../services/posts'
 
 export default function CreatePostScreen({ navigation }) {
   const [caption, setCaption] = useState('')
@@ -50,16 +50,12 @@ export default function CreatePostScreen({ navigation }) {
     try {
       const downloadUrl = await uploadImageAsync(image)
       
-      await addDoc(collection(db, 'posts'), {
+      await createPost({
         userId: auth.currentUser?.uid || 'anonymous',
         username: auth.currentUser?.displayName || 'Sultan Muhammad',
-        avatar: auth.currentUser?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
-        image: downloadUrl,
+        userPhoto: auth.currentUser?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+        imageUrl: downloadUrl,
         caption: caption.trim(),
-        likesCount: 0,
-        commentsCount: 0,
-        likedBy: [],
-        createdAt: serverTimestamp()
       })
 
       setCaption('')
