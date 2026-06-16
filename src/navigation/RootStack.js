@@ -3,20 +3,17 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import AuthStack from './AuthStack'
 import MainTabs from './MainTabs'
+import StoryScreen from '../screens/StoryScreen'
 import { useAuthStore } from '../store/useAuthStore'
 import { useInitializeAuth } from '../hooks/useInitializeAuth'
 
 const Stack = createNativeStackNavigator()
 
 export default function RootStack() {
-  // Initialize the auth state listener
   useInitializeAuth()
 
-  // Select only the pieces of state we need using granular selectors
-  const user = useAuthStore((state) => state.user)
   const isHydrated = useAuthStore((state) => state.isHydrated)
 
-  // Show a dark loading screen while restoring store state from AsyncStorage
   if (!isHydrated) {
     return (
       <View style={styles.loadingContainer}>
@@ -25,12 +22,19 @@ export default function RootStack() {
     )
   }
 
-  const isLoggedIn = !!user
+  const isLoggedIn = true
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {isLoggedIn ? (
-        <Stack.Screen name="MainApp" component={MainTabs} />
+        <>
+          <Stack.Screen name="MainApp" component={MainTabs} />
+          <Stack.Screen 
+            name="StoryScreen" 
+            component={StoryScreen} 
+            options={{ animation: 'fade' }} 
+          />
+        </>
       ) : (
         <Stack.Screen name="Auth" component={AuthStack} />
       )}
@@ -45,4 +49,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-})
+})

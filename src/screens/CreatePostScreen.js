@@ -1,10 +1,8 @@
 import React, { useState } from 'react'
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator, Alert, Keyboard, Platform, StatusBar } from 'react-native'
-import { Image } from 'expo-image'
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import { useAuthStore } from '../store/useAuthStore'
-import { db, storage } from '../config/firebase'
-import { collection, addDoc, serverTimestamp, doc, updateDoc, increment } from 'firebase/firestore'
+import { Feather } from '@expo/vector-icons'
+import { storage, auth } from '../config/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 export default function CreatePostScreen({ navigation }) {
@@ -12,19 +10,32 @@ export default function CreatePostScreen({ navigation }) {
   const [caption, setCaption] = useState('')
   const [image, setImage] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [fbSwitch, setFbSwitch] = useState(false)
+  const [twitterSwitch, setTwitterSwitch] = useState(false)
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+  const selectImageSource = () => {
+    Alert.alert(
+      'Pilih Foto',
+      'Dari mana kamu ingin mengambil foto?',
+      [
+        { text: 'Kamera', onPress: takePhoto },
+        { text: 'Galeri', onPress: pickImage },
+        { text: 'Batal', style: 'cancel' }
+      ]
+    )
+  }
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert('Izin Ditolak', 'Aplikasi membutuhkan akses galeri untuk mengunggah foto.')
+      Alert.alert('Izin Ditolak', 'Aplikasi membutuhkan akses kamera untuk mengambil foto!')
       return
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    let result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.7,
     })
 
     if (!result.canceled) {
@@ -32,7 +43,36 @@ export default function CreatePostScreen({ navigation }) {
     }
   }
 
-  const handleCreatePost = async () => {
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (status !== 'granted') {
+      Alert.alert('Izin Ditolak', 'Aplikasi membutuhkan akses galeri untuk mengupload foto!')
+      return
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    })
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri)
+    }
+  }
+
+  const uploadImageAsync = async (uri) => {
+    const response = await fetch(uri)
+    const blob = await response.blob()
+    const filename = `posts/${auth.currentUser?.uid || 'anonymous'}_${Date.now()}.jpg`
+    const storageRef = ref(storage, filename)
+    
+    await uploadBytes(storageRef, blob)
+    return await getDownloadURL(storageRef)
+  }
+
+  const handleShare = async () => {
     if (!image) {
       Alert.alert('Peringatan', 'Kamu wajib memilih gambar terlebih dahulu!')
       return
@@ -47,29 +87,24 @@ export default function CreatePostScreen({ navigation }) {
     Keyboard.dismiss()
 
     try {
-      const response = await fetch(image)
-      const blob = await response.blob()
-      const filename = `posts/${user.uid}_${Date.now()}.jpg`
-      const storageRef = ref(storage, filename)
+      const downloadUrl = await uploadImageAsync(image)
       
-      await uploadBytes(storageRef, blob)
-      const downloadURL = await getDownloadURL(storageRef)
-
-      await addDoc(collection(db, 'posts'), {
-        userId: user.uid,
-        username: user.displayName || 'User',
-        imageUrl: downloadURL,
+      await createPost({
+        userId: auth.currentUser?.uid || 'anonymous',
+        username: auth.currentUser?.displayName || 'Dian',
+        userPhoto: auth.currentUser?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
+        imageUrl: downloadUrl,
         caption: caption.trim(),
         likeCount: 0,
         commentCount: 0,
         createdAt: serverTimestamp()
       })
 
-      const userRef = doc(db, 'users', user.uid)
-      await updateDoc(userRef, {
-        postCount: increment(1)
-      })
-
+      setCaption('')
+      setImage(null)
+      setFbSwitch(false)
+      setTwitterSwitch(false)
+      
       Alert.alert('Sukses', 'Postingan kamu berhasil dibagikan!', [
         {
           text: 'OK',
@@ -103,43 +138,132 @@ export default function CreatePostScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Buat Post Baru</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerLeft}>
+          <Feather name="x" size={24} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Post</Text>
         <TouchableOpacity 
-          style={[styles.postBtn, (!image || isSubmitting) && styles.disabledPostBtn]} 
-          onPress={handleCreatePost}
-          disabled={isSubmitting || !image}
+          style={[styles.shareBtnTop, isSubmitting && styles.disabledBtnTop]} 
+          onPress={handleShare}
+          disabled={isSubmitting}
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#ffffff" size="small" />
+            <ActivityIndicator size="small" color="#000000" />
           ) : (
-            <Text style={styles.postBtnText}>Bagikan</Text>
+            <Text style={styles.shareTextTop}>Share</Text>
           )}
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        <TouchableOpacity style={styles.imageSelector} onPress={pickImage} disabled={isSubmitting}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.previewImage} />
-          ) : (
-            <View style={styles.placeholderContainer}>
-              <Text style={styles.placeholderText}>+ Pilih Foto</Text>
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        
+        <View style={styles.imageSection}>
+          <TouchableOpacity style={styles.uploadBox} onPress={selectImageSource} disabled={isSubmitting}>
+            {image ? (
+              <Image source={{ uri: image }} style={styles.previewImage} />
+            ) : (
+              <View style={styles.uploadPlaceholderContainer}>
+                <Feather name="image" size={40} color="#666666" />
+              </View>
+            )}
+            
+            {!image && (
+              <View style={styles.aspectRatioPill}>
+                <View style={styles.aspectIconActive}><Text style={styles.aspectTextActive}>□</Text></View>
+                <View style={styles.aspectIcon}><Text style={styles.aspectText}>▯</Text></View>
+                <View style={styles.aspectIcon}><Text style={styles.aspectText}>▭</Text></View>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.toolbar}>
+          <TouchableOpacity style={styles.toolbarItem}>
+            <Feather name="sliders" size={20} color="#ffffff" style={styles.toolbarIcon} />
+            <Text style={styles.toolbarText}>Filters</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolbarItem}>
+            <Feather name="edit-2" size={20} color="#ffffff" style={styles.toolbarIcon} />
+            <Text style={styles.toolbarText}>Edit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolbarItem}>
+            <Feather name="layers" size={20} color="#ffffff" style={styles.toolbarIcon} />
+            <Text style={styles.toolbarText}>Presets</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.captionSection}>
+          <Text style={styles.sectionLabel}>Caption</Text>
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Write a caption..."
+              placeholderTextColor="#666666"
+              multiline
+              maxLength={280}
+              value={caption}
+              onChangeText={setCaption}
+              editable={!isSubmitting}
+            />
+          </View>
+        </View>
+
+        <View style={styles.settingsList}>
+          <TouchableOpacity style={styles.settingRow} onPress={() => navigation.navigate('TagPeople')}>
+            <View style={styles.settingRowLeft}>
+              <Feather name="user-plus" size={20} color="#ffffff" style={styles.settingRowIcon} />
+              <Text style={styles.settingText}>Tag People</Text>
             </View>
-          )}
-        </TouchableOpacity>
+            <Feather name="chevron-right" size={20} color="#666666" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.settingRow}>
+            <View style={styles.settingRowLeft}>
+              <Feather name="map-pin" size={20} color="#ffffff" style={styles.settingRowIcon} />
+              <Text style={styles.settingText}>Add Location</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#666666" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.settingRow}>
+            <View style={styles.settingRowLeft}>
+              <Feather name="settings" size={20} color="#ffffff" style={styles.settingRowIcon} />
+              <Text style={styles.settingText}>Advanced Settings</Text>
+            </View>
+            <Feather name="chevron-right" size={20} color="#666666" />
+          </TouchableOpacity>
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Tulis caption atau deskripsi vibe-mu di sini..."
-          placeholderTextColor="#666666"
-          multiline
-          maxLength={280}
-          value={caption}
-          onChangeText={setCaption}
-          editable={!isSubmitting}
-        />
-        <Text style={styles.charCounter}>{caption.length}/280</Text>
-      </View>
+        <View style={styles.crosspostContainer}>
+          <View style={styles.crosspostHeader}>
+            <Feather name="share-2" size={16} color="#ffffff" style={styles.crosspostHeaderIcon} />
+            <Text style={styles.crosspostTitle}>Cross-post to other platforms</Text>
+          </View>
+          
+          <View style={styles.switchRowContainer}>
+            <View style={styles.switchItem}>
+              <Switch
+                trackColor={{ false: '#333333', true: '#ffffff' }}
+                thumbColor={fbSwitch ? '#000000' : '#888888'}
+                onValueChange={() => setFbSwitch(!fbSwitch)}
+                value={fbSwitch}
+              />
+              <Text style={styles.switchLabel}>Facebook</Text>
+            </View>
+            
+            <View style={styles.switchItem}>
+              <Switch
+                trackColor={{ false: '#333333', true: '#ffffff' }}
+                thumbColor={twitterSwitch ? '#000000' : '#888888'}
+                onValueChange={() => setTwitterSwitch(!twitterSwitch)}
+                value={twitterSwitch}
+              />
+              <Text style={styles.switchLabel}>Twitter</Text>
+            </View>
+          </View>
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
   )
 }
@@ -150,55 +274,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#000000',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 0
   },
-  center: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32
-  },
   header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: '#222222',
-    justifyContent: 'space-between'
+    borderBottomColor: '#111111'
+  },
+  headerLeft: {
+    width: 60,
   },
   headerTitle: {
     color: '#ffffff',
     fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center'
+  },
+  shareBtnTop: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+    width: 70,
+    alignItems: 'center'
+  },
+  disabledBtnTop: {
+    backgroundColor: '#555555'
+  },
+  shareTextTop: {
+    color: '#000000',
+    fontSize: 14,
     fontWeight: 'bold'
   },
-  postBtn: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 8,
-    paddingHorizontal: 24,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80
+  scrollContainer: {
+    paddingBottom: 40
   },
-  disabledPostBtn: {
-    backgroundColor: '#333333'
+  imageSection: {
+    padding: 16,
+    paddingBottom: 0
   },
-  postBtnText: {
-    color: '#000000',
-    fontWeight: 'bold',
-    fontSize: 14
-  },
-  content: {
-    flex: 1,
-    padding: 16
-  },
-  imageSelector: {
-    width: '100%',
-    aspectRatio: 1,
+  uploadBox: {
+    height: 320,
     backgroundColor: '#111111',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 16,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#222222'
+    borderColor: '#333333',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative'
+  },
+  uploadPlaceholderContainer: {
+    alignItems: 'center'
   },
   previewImage: {
     width: '100%',
@@ -209,33 +339,133 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  placeholderText: {
+  aspectRatioPill: {
+    position: 'absolute',
+    bottom: 16,
+    flexDirection: 'row',
+    backgroundColor: '#000000',
+    borderRadius: 20,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#333333'
+  },
+  aspectIconActive: {
+    backgroundColor: '#333333',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16
+  },
+  aspectIcon: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  aspectTextActive: {
+    color: '#ffffff',
+    fontSize: 16
+  },
+  aspectText: {
     color: '#aaaaaa',
-    fontSize: 16,
-    fontWeight: '600'
+    fontSize: 16
+  },
+  toolbar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#111111',
+    marginHorizontal: 16
+  },
+  toolbarItem: {
+    alignItems: 'center'
+  },
+  toolbarIcon: {
+    marginBottom: 4
+  },
+  toolbarText: {
+    color: '#aaaaaa',
+    fontSize: 12
+  },
+  captionSection: {
+    padding: 16
+  },
+  sectionLabel: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8
+  },
+  inputWrapper: {
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#111111'
   },
   input: {
     color: '#ffffff',
-    fontSize: 16,
-    textAlignVertical: 'top',
-    height: 100,
-    lineHeight: 24,
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#222222'
-  },
-  charCounter: {
-    color: '#666666',
-    fontSize: 12,
-    textAlign: 'right',
-    marginTop: 4
-  },
-  warningText: {
-    color: '#aaaaaa',
     fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 22
+    minHeight: 80,
+    textAlignVertical: 'top'
+  },
+  settingsList: {
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#111111'
+  },
+  settingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#111111'
+  },
+  settingRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  settingRowIcon: {
+    marginRight: 12,
+    width: 24,
+    textAlign: 'center'
+  },
+  settingText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500'
+  },
+  crosspostContainer: {
+    margin: 16,
+    backgroundColor: '#111111',
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#333333'
+  },
+  crosspostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16
+  },
+  crosspostHeaderIcon: {
+    marginRight: 8
+  },
+  crosspostTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  switchRowContainer: {
+    flexDirection: 'row',
+    gap: 24
+  },
+  switchItem: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  switchLabel: {
+    marginLeft: 8,
+    fontSize: 12,
+    color: '#aaaaaa'
   }
 })

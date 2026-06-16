@@ -7,14 +7,10 @@ const ScreenWrapper = ({ name }) => (
   </View>
 )
 
-export const LoginScreen = () => <ScreenWrapper name="Login Screen" />
-export const RegisterScreen = () => <ScreenWrapper name="Register Screen" />
+// Sisa halaman yang BELUM dibikinin file aslinya:
 export const ForgotPasswordScreen = () => <ScreenWrapper name="Forgot Password Screen" />
-export const DiscoveryScreen = () => <ScreenWrapper name="Discovery Screen" />
 export const CreatePostScreen = () => <ScreenWrapper name="Create Post Screen" />
-export const NotificationsScreen = () => <ScreenWrapper name="Notifications Screen" />
 export const PostDetailScreen = () => <ScreenWrapper name="Post Detail Screen" />
-export const ProfileScreen = () => <ScreenWrapper name="Profile Screen" />
 export const EditProfileScreen = () => <ScreenWrapper name="Edit Profile Screen" />
 
 const styles = StyleSheet.create({
