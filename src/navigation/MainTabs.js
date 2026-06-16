@@ -1,7 +1,7 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
-import { useSafeAreaInsets } from 'react-native-safe-area-context' 
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedStack from './FeedStack'
 import ProfileStack from './ProfileStack'
 import DiscoveryScreen from '../screens/DiscoveryScreen'
@@ -11,7 +11,7 @@ import CreatePostScreen from '../screens/CreatePostScreen'
 const Tab = createBottomTabNavigator()
 
 export default function MainTabs() {
-  const insets = useSafeAreaInsets() 
+  const insets = useSafeAreaInsets()
 
   return (
     <Tab.Navigator
@@ -22,8 +22,8 @@ export default function MainTabs() {
         tabBarStyle: {
           backgroundColor: '#000000',
           borderTopColor: '#222222',
-          height: 50 + (insets.bottom > 0 ? insets.bottom : 12),
-          paddingBottom: insets.bottom > 0 ? insets.bottom - 4 : 12,
+          height: 70 + (insets.bottom > 0 ? insets.bottom : 10),
+          paddingBottom: insets.bottom > 0 ? insets.bottom + 6 : 14,
           paddingTop: 8,
         },
         tabBarIcon: ({ focused, color, size }) => {
