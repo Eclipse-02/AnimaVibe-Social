@@ -1,155 +1,167 @@
-import React, { useState, memo } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
-import { useAuth } from '../hooks/useAuth';
-import { useAuthStore } from '../store/useAuthStore';
+import React from 'react'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
-function RegisterScreen({ navigation }) {
-  const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [localError, setLocalError] = useState(null);
-
-  const { register } = useAuth();
-  
-  // Selector granular for state values from useAuthStore
-  const isLoading = useAuthStore((state) => state.isLoading);
-  const authError = useAuthStore((state) => state.error);
-
-  const handleRegister = async () => {
-    setLocalError(null);
-
-    // Client-side validations
-    if (!displayName.trim() || !email.trim() || !password || !confirmPassword) {
-      setLocalError('Please fill in all fields.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setLocalError('Passwords do not match.');
-      return;
-    }
-
-    if (password.length < 6) {
-      setLocalError('Password must be at least 6 characters.');
-      return;
-    }
-
-    try {
-      await register(email.trim(), password, displayName.trim());
-    } catch (err) {
-      // Error is caught here, but Zustand handles storing it globally
-    }
-  };
-
-  const handleNavigateToLogin = () => {
-    navigation.navigate('Login');
-  };
-
-  const displayedError = localError || authError;
-
+export default function RegisterScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.brandContainer}>
-        <Text style={styles.logoText}>Create Account</Text>
-        <Text style={styles.subText}>Join the AnimaVibe community</Text>
-      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Header Bagian Atas */}
+        <Text style={styles.title}>Create an account</Text>
+        <Text style={styles.subtitle}>Join Social App today</Text>
 
-      <View style={styles.formContainer}>
-        {displayedError && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{displayedError}</Text>
-          </View>
-        )}
+        {/* Form Input */}
+        <View style={styles.formContainer}>
+          <Text style={styles.label}>Full Name</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Enter your full name" 
+            placeholderTextColor="#777777" 
+          />
 
-        <TextInput
-          style={[styles.input, isLoading && styles.disabledInput]}
-          placeholder="Full name"
-          placeholderTextColor="#555"
-          value={displayName}
-          onChangeText={setDisplayName}
-          autoCapitalize="words"
-          autoComplete="name"
-          textContentType="name"
-          editable={!isLoading}
-        />
-        <TextInput
-          style={[styles.input, isLoading && styles.disabledInput]}
-          placeholder="Email address"
-          placeholderTextColor="#555"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          textContentType="emailAddress"
-          editable={!isLoading}
-        />
-        <TextInput
-          style={[styles.input, isLoading && styles.disabledInput]}
-          placeholder="Password"
-          placeholderTextColor="#555"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          autoCapitalize="none"
-          autoComplete="password-new"
-          textContentType="newPassword"
-          editable={!isLoading}
-        />
-        <TextInput
-          style={[styles.input, isLoading && styles.disabledInput]}
-          placeholder="Confirm password"
-          placeholderTextColor="#555"
-          secureTextEntry
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          autoCapitalize="none"
-          autoComplete="password-new"
-          textContentType="newPassword"
-          editable={!isLoading}
-        />
+          <Text style={styles.label}>Email</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Enter your email" 
+            placeholderTextColor="#777777" 
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          
+          <Text style={styles.label}>Password</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Create a password" 
+            placeholderTextColor="#777777" 
+            secureTextEntry 
+          />
+          
+          <TouchableOpacity style={styles.mainButton}>
+            <Text style={styles.mainButtonText}>Sign up</Text>
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity 
-          style={[styles.buttonRegister, isLoading && styles.buttonDisabled]} 
-          onPress={handleRegister}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color="#000000" />
-          ) : (
-            <Text style={styles.buttonText}>Sign Up</Text>
-          )}
+        {/* Divider OR */}
+        <View style={styles.dividerContainer}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.orText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Tombol Social Media */}
+        <TouchableOpacity style={styles.outlineButton}>
+          <Text style={styles.outlineButtonText}>Sign up with Google</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.buttonLogin} 
-          onPress={handleNavigateToLogin}
-          disabled={isLoading}
-        >
-          <Text style={[styles.buttonText, { color: '#888' }]}>
-            Already have an account? <Text style={{ color: '#fff' }}>Sign In</Text>
-          </Text>
-        </TouchableOpacity>
-      </View>
+        {/* Tombol Pindah ke Login */}
+        <View style={styles.footerContainer}>
+          <Text style={styles.footerText}>Already have an account? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.footerLink}>Log in</Text>
+          </TouchableOpacity>
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000', justifyContent: 'center', padding: 24 },
-  brandContainer: { alignItems: 'center', marginBottom: 32 },
-  logoText: { fontSize: 32, fontWeight: 'bold', color: '#ffffff', letterSpacing: 1 },
-  subText: { color: '#666', marginTop: 8, fontSize: 14 },
-  formContainer: { width: '100%' },
-  input: { backgroundColor: '#111', color: '#fff', padding: 16, borderRadius: 12, marginBottom: 16, fontSize: 16, borderWidth: 1, borderColor: '#222' },
-  disabledInput: { opacity: 0.6 },
-  buttonRegister: { backgroundColor: '#fff', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 10, height: 56, justifyContent: 'center' },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: { fontWeight: 'bold', fontSize: 16, color: '#000' },
-  buttonLogin: { alignItems: 'center', marginTop: 24 },
-  errorContainer: { backgroundColor: '#2c0d0d', padding: 12, borderRadius: 8, marginBottom: 16, borderWidth: 1, borderColor: '#5c1d1d' },
-  errorText: { color: '#ff6b6b', fontSize: 14, textAlign: 'center', fontWeight: '500' }
-});
-
-export default memo(RegisterScreen);
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    justifyContent: 'center',
+    paddingVertical: 40
+  },
+  title: {
+    color: '#ffffff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8
+  },
+  subtitle: {
+    color: '#aaaaaa',
+    textAlign: 'center',
+    marginBottom: 32,
+    fontSize: 14
+  },
+  formContainer: {
+    marginBottom: 24
+  },
+  label: {
+    color: '#ffffff',
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '500'
+  },
+  input: {
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 8,
+    padding: 14,
+    color: '#ffffff',
+    marginBottom: 16,
+    fontSize: 14
+  },
+  mainButton: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8
+  },
+  mainButtonText: {
+    color: '#000000',
+    fontWeight: 'bold',
+    fontSize: 16
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#333333'
+  },
+  orText: {
+    color: '#777777',
+    marginHorizontal: 16,
+    fontSize: 12
+  },
+  outlineButton: {
+    borderWidth: 1,
+    borderColor: '#333333',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  outlineButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 14
+  },
+  footerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20
+  },
+  footerText: {
+    color: '#aaaaaa',
+    fontSize: 14
+  },
+  footerLink: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: 'bold'
+  }
+})

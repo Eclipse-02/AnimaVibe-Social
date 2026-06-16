@@ -1,264 +1,230 @@
-import React, { useEffect, useState } from 'react'
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, FlatList, Platform, StatusBar, ActivityIndicator, Alert } from 'react-native'
-import { db, auth } from '../config/firebase'
-import { signOut } from 'firebase/auth'
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
+import React, { useState } from 'react'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
-export default function ProfileScreen() {
-  const [displayName, setDisplayName] = useState('')
-  const [bio, setBio] = useState('')
-  const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 })
-  const [isLoading, setIsLoading] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-
-  const currentUser = auth.currentUser
-
-  useEffect(() => {
-    const fetchProfileAndStats = async () => {
-      if (!currentUser) {
-        setIsLoading(false)
-        return
-      }
-
-      try {
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid))
-        if (userDoc.exists()) {
-          const data = userDoc.data()
-          setDisplayName(data.displayName || currentUser.displayName || 'No Name')
-          setBio(data.bio || 'No bio yet.')
-          setStats({
-            posts: data.postsCount || 0,
-            followers: data.followersCount || 0,
-            following: data.followingCount || 0
-          })
-        } else {
-          setDisplayName(currentUser.displayName || 'No Name')
-          setBio('No bio yet.')
-        }
-
-        const postsQuery = query(collection(db, 'posts'), where('userId', '==', currentUser.uid))
-        const postsSnapshot = await getDocs(postsQuery)
-        
-        setStats(prev => ({
-          ...prev,
-          posts: postsSnapshot.size
-        }))
-
-      } catch (error) {
-        console.error(error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchProfileAndStats()
-  }, [currentUser])
-
-  const handleSave = async () => {
-    if (!currentUser) return
-    setIsSaving(true)
-    try {
-      const userRef = doc(db, 'users', currentUser.uid)
-      await updateDoc(userRef, {
-        displayName: displayName.trim(),
-        bio: bio.trim()
-      })
-      setIsEditing(false)
-      Alert.alert('Sukses', 'Profil kamu berhasil diperbarui!')
-    } catch (error) {
-      Alert.alert('Gagal', error.message)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleForceLogout = async () => {
-    try {
-      await signOut(auth)
-    } catch (error) {
-      Alert.alert('Error', 'Gagal memicu sistem login: ' + error.message)
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <SafeAreaView style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#ffffff" />
-      </SafeAreaView>
-    )
-  }
-
-  if (!currentUser) {
-    return (
-      <SafeAreaView style={[styles.container, styles.center]}>
-        <View style={styles.guestContainer}>
-          <View style={styles.avatarPlaceholderEmpty} />
-          <Text style={styles.guestDesc}>
-            Kamu harus masuk ke akun kamu terlebih dahulu untuk melihat, mengubah, dan mempersonalisasikan halaman profil sosial mediamu.
-          </Text>
-          <TouchableOpacity style={styles.loginBtn} onPress={handleForceLogout}>
-            <Text style={styles.loginBtnText}>Login Sekarang</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    )
-  }
-
-  const renderHeader = () => (
-    <View>
-      <View style={styles.profileHeader}>
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatarPlaceholder} />
-        </View>
-        
-        {isEditing ? (
-          <View style={styles.editForm}>
-            <TextInput
-              style={styles.input}
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Nama Tampilan"
-              placeholderTextColor="#555555"
-            />
-            <TextInput
-              style={[styles.input, styles.bioInput]}
-              value={bio}
-              onChangeText={setBio}
-              placeholder="Tulis bio kamu..."
-              placeholderTextColor="#555555"
-              multiline
-            />
-          </View>
-        ) : (
-          <View style={{ alignItems: 'center' }}>
-            <Text style={styles.name}>{displayName}</Text>
-            <Text style={styles.username}>@{currentUser?.email?.split('@')[0]}</Text>
-            <Text style={styles.bio}>{bio}</Text>
-          </View>
-        )}
-
-        {isEditing ? (
-          <TouchableOpacity style={[styles.editBtn, styles.saveBtn]} onPress={handleSave} disabled={isSaving}>
-            {isSaving ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.editBtnText}>Save Profile</Text>}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
-            <Text style={styles.editBtnText}>Edit Profile</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.statsContainer}>
-        <View style={styles.statBox}>
-          <Text style={styles.statNum}>{stats.posts}</Text>
-          <Text style={styles.statLabel}>Posts</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statNum}>{stats.followers}</Text>
-          <Text style={styles.statLabel}>Followers</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statNum}>{stats.following}</Text>
-          <Text style={styles.statLabel}>Following</Text>
-        </View>
-      </View>
-    </View>
-  )
+export default function LoginScreen({ navigation }) {
+  const [isChecked, setIsChecked] = useState(false)
 
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList
-        data={Array(stats.posts).fill(null)}
-        numColumns={3}
-        ListHeaderComponent={renderHeader}
-        renderItem={() => <View style={styles.gridItem} />}
-        keyExtractor={(_, index) => index.toString()}
-        style={styles.grid}
-      />
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Header Bagian Atas */}
+        <View style={styles.logoBox} />
+        <Text style={styles.title}>Social App</Text>
+        <Text style={styles.subtitle}>Log in to your account</Text>
+
+        {/* Form Input */}
+        <View style={styles.formContainer}>
+          <Text style={styles.label}>Email</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Enter your email" 
+            placeholderTextColor="#777777" 
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          
+          <View style={styles.passwordHeader}>
+            <Text style={styles.label}>Password</Text>
+            <TouchableOpacity>
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Enter your password" 
+            placeholderTextColor="#777777" 
+            secureTextEntry 
+          />
+
+          {/* Remember Me Checkbox (Custom UI) */}
+          <TouchableOpacity 
+            style={styles.checkboxContainer} 
+            activeOpacity={0.8}
+            onPress={() => setIsChecked(!isChecked)}
+          >
+            <View style={[styles.checkbox, isChecked && styles.checkboxActive]}>
+              {isChecked && <Text style={styles.checkmark}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>Remember me</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.mainButton}>
+            <Text style={styles.mainButtonText}>Log in</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Divider OR */}
+        <View style={styles.dividerContainer}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.orText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Tombol Social Media */}
+        <TouchableOpacity style={styles.outlineButton}>
+          <Text style={styles.outlineButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.outlineButton}>
+          <Text style={styles.outlineButtonText}>Continue with SSO</Text>
+        </TouchableOpacity>
+
+        {/* Tombol Pindah ke Register */}
+        <View style={styles.footerContainer}>
+          <Text style={styles.footerText}>Don't have an account? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.footerLink}>Sign up</Text>
+          </TouchableOpacity>
+        </View>
+
+      </ScrollView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#000000', 
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 0 
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
   },
-  center: {
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  guestContainer: {
-    alignItems: 'center',
+  scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
-    width: '100%'
+    justifyContent: 'center',
+    paddingVertical: 40
   },
-  avatarPlaceholderEmpty: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#111111',
-    borderWidth: 1,
-    borderColor: '#222222',
-    marginBottom: 24
+  logoBox: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#333333',
+    alignSelf: 'center',
+    marginBottom: 24,
+    borderRadius: 12
   },
-  guestDesc: {
-    color: '#666666',
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 28,
-    paddingHorizontal: 10
-  },
-  loginBtn: {
-    backgroundColor: '#ffffff',
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-    borderRadius: 25,
-    width: '100%',
-    alignItems: 'center'
-  },
-  loginBtnText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold'
-  },
-  profileHeader: { alignItems: 'center', marginTop: 10 },
-  avatarContainer: { marginBottom: 4 },
-  avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#222', borderWidth: 2, borderColor: '#fff' },
-  name: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 12 },
-  username: { color: '#666', fontSize: 14, marginTop: 2 },
-  bio: { color: '#aaa', fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 20 },
-  editForm: {
-    width: '100%',
-    marginTop: 12
-  },
-  input: {
-    backgroundColor: '#111',
+  title: {
     color: '#ffffff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#222',
-    paddingHorizontal: 12,
-    height: 40,
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8
+  },
+  subtitle: {
+    color: '#aaaaaa',
+    textAlign: 'center',
+    marginBottom: 32,
     fontSize: 14
   },
-  bioInput: {
-    height: 60,
-    textAlignVertical: 'top',
-    paddingTop: 8
+  formContainer: {
+    marginBottom: 24
   },
-  editBtn: { backgroundColor: '#111', borderWidth: 1, borderColor: '#222', width: '100%', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 16 },
-  saveBtn: { backgroundColor: '#22c55e', borderColor: '#22c55e' },
-  editBtnText: { color: '#fff', fontWeight: '600' },
-  statsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 24, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#111', paddingVertical: 16 },
-  statBox: { alignItems: 'center' },
-  statNum: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  statLabel: { color: '#555', fontSize: 12, marginTop: 4 },
-  grid: { marginTop: 16 },
-  gridItem: { flex: 1, aspectRatio: 1, backgroundColor: '#111', margin: 2, borderRadius: 4 }
+  label: {
+    color: '#ffffff',
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: '500'
+  },
+  input: {
+    backgroundColor: '#111111',
+    borderWidth: 1,
+    borderColor: '#333333',
+    borderRadius: 8,
+    padding: 14,
+    color: '#ffffff',
+    marginBottom: 16,
+    fontSize: 14
+  },
+  passwordHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  forgotText: {
+    color: '#3b82f6',
+    fontSize: 12,
+    fontWeight: '500'
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 1,
+    borderColor: '#555555',
+    borderRadius: 4,
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#111111'
+  },
+  checkboxActive: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6'
+  },
+  checkmark: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: 'bold'
+  },
+  checkboxLabel: {
+    color: '#aaaaaa',
+    fontSize: 14
+  },
+  mainButton: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  mainButtonText: {
+    color: '#000000',
+    fontWeight: 'bold',
+    fontSize: 16
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#333333'
+  },
+  orText: {
+    color: '#777777',
+    marginHorizontal: 16,
+    fontSize: 12
+  },
+  outlineButton: {
+    borderWidth: 1,
+    borderColor: '#333333',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  outlineButtonText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 14
+  },
+  footerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 20
+  },
+  footerText: {
+    color: '#aaaaaa',
+    fontSize: 14
+  },
+  footerLink: {
+    color: '#3b82f6',
+    fontSize: 14,
+    fontWeight: 'bold'
+  }
 })
