@@ -1,8 +1,47 @@
-import React from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import React, { useState } from 'react'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useAuth } from '../hooks/useAuth'
 
 export default function RegisterScreen({ navigation }) {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const { register } = useAuth()
+
+  const handleSignUp = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Validation Error', 'Please enter your full name')
+      return
+    }
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email')
+      return
+    }
+    if (!password.trim()) {
+      Alert.alert('Validation Error', 'Please enter a password')
+      return
+    }
+    if (password.length < 6) {
+      Alert.alert('Validation Error', 'Password must be at least 6 characters')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await register(email.trim(), password, fullName.trim())
+      Alert.alert('Success', 'Account created successfully!')
+      setFullName('')
+      setEmail('')
+      setPassword('')
+    } catch (error) {
+      Alert.alert('Registration Error', error.message || 'Failed to create account')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -17,7 +56,10 @@ export default function RegisterScreen({ navigation }) {
           <TextInput 
             style={styles.input} 
             placeholder="Enter your full name" 
-            placeholderTextColor="#777777" 
+            placeholderTextColor="#777777"
+            value={fullName}
+            onChangeText={setFullName}
+            editable={!isLoading}
           />
 
           <Text style={styles.label}>Email</Text>
@@ -27,6 +69,9 @@ export default function RegisterScreen({ navigation }) {
             placeholderTextColor="#777777" 
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            editable={!isLoading}
           />
           
           <Text style={styles.label}>Password</Text>
@@ -34,11 +79,22 @@ export default function RegisterScreen({ navigation }) {
             style={styles.input} 
             placeholder="Create a password" 
             placeholderTextColor="#777777" 
-            secureTextEntry 
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!isLoading}
           />
           
-          <TouchableOpacity style={styles.mainButton}>
-            <Text style={styles.mainButtonText}>Sign up</Text>
+          <TouchableOpacity 
+            style={[styles.mainButton, isLoading && styles.mainButtonDisabled]} 
+            onPress={handleSignUp}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <Text style={styles.mainButtonText}>Sign up</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -116,6 +172,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8
+  },
+  mainButtonDisabled: {
+    backgroundColor: '#888888',
+    opacity: 0.7
   },
   mainButtonText: {
     color: '#000000',

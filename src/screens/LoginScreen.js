@@ -1,9 +1,41 @@
 import React, { useState } from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useAuth } from '../hooks/useAuth'
 
 export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [isChecked, setIsChecked] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const { login } = useAuth()
+
+  const handleLogin = async () => {
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email')
+      return
+    }
+    if (!password.trim()) {
+      Alert.alert('Validation Error', 'Please enter your password')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await login(email.trim(), password)
+      Alert.alert('Success', 'Logged in successfully!')
+      setEmail('')
+      setPassword('')
+    } catch (error) {
+      Alert.alert('Login Error', error.message || 'Failed to log in')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleForgotPassword = () => {
+    navigation.navigate('ForgotPassword')
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -23,11 +55,14 @@ export default function LoginScreen({ navigation }) {
             placeholderTextColor="#777777" 
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            editable={!isLoading}
           />
           
           <View style={styles.passwordHeader}>
             <Text style={styles.label}>Password</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleForgotPassword}>
               <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
@@ -35,7 +70,10 @@ export default function LoginScreen({ navigation }) {
             style={styles.input} 
             placeholder="Enter your password" 
             placeholderTextColor="#777777" 
-            secureTextEntry 
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!isLoading}
           />
 
           {/* Remember Me Checkbox (Custom UI) */}
@@ -43,6 +81,7 @@ export default function LoginScreen({ navigation }) {
             style={styles.checkboxContainer} 
             activeOpacity={0.8}
             onPress={() => setIsChecked(!isChecked)}
+            disabled={isLoading}
           >
             <View style={[styles.checkbox, isChecked && styles.checkboxActive]}>
               {isChecked && <Text style={styles.checkmark}>✓</Text>}
@@ -50,8 +89,16 @@ export default function LoginScreen({ navigation }) {
             <Text style={styles.checkboxLabel}>Remember me</Text>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.mainButton}>
-            <Text style={styles.mainButtonText}>Log in</Text>
+          <TouchableOpacity 
+            style={[styles.mainButton, isLoading && styles.mainButtonDisabled]} 
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <Text style={styles.mainButtonText}>Log in</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -179,6 +226,10 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
     alignItems: 'center'
+  },
+  mainButtonDisabled: {
+    backgroundColor: '#888888',
+    opacity: 0.7
   },
   mainButtonText: {
     color: '#000000',

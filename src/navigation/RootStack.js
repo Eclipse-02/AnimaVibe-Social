@@ -13,6 +13,7 @@ export default function RootStack() {
   useInitializeAuth()
 
   const isHydrated = useAuthStore((state) => state.isHydrated)
+  const user = useAuthStore((state) => state.user)
 
   if (!isHydrated) {
     return (
@@ -22,7 +23,7 @@ export default function RootStack() {
     )
   }
 
-  const isLoggedIn = true
+  const isLoggedIn = user !== null
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
