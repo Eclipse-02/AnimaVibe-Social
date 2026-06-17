@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   increment,
   limit,
@@ -12,6 +13,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { createCommentNotification } from './notifications'
 
 function mapCommentDoc(commentDoc) {
   return {
@@ -58,6 +60,21 @@ export async function addComment(postId, comment = {}) {
       commentsCount: increment(1),
       updatedAt: serverTimestamp(),
     })
+
+    const postSnap = await getDoc(doc(db, 'posts', postId))
+
+    if (postSnap.exists()) {
+      await createCommentNotification(
+        {
+          id: postSnap.id,
+          ...postSnap.data(),
+        },
+        {
+          id: commentRef.id,
+          ...commentData,
+        }
+      )
+    }
 
     return {
       id: commentRef.id,

@@ -10,6 +10,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { createFollowNotification } from './notifications'
 
 /**
  * Creates or replaces a user profile document in Firestore.
@@ -106,7 +107,7 @@ export async function updateUserProfile(uid, updates = {}) {
  * @param {string} targetUserId User being followed.
  * @returns {Promise<Object>} Follow status.
  */
-export async function followUser(currentUserId, targetUserId) {
+export async function followUser(currentUserId, targetUserId, actor = {}) {
   try {
     if (!currentUserId || !targetUserId) {
       throw new Error('Both user ids are required to follow a user.')
@@ -118,6 +119,7 @@ export async function followUser(currentUserId, targetUserId) {
 
     const currentUserRef = doc(db, 'users', currentUserId)
     const targetUserRef = doc(db, 'users', targetUserId)
+    let didFollow = false
 
     await runTransaction(db, async (transaction) => {
       const currentUserSnap = await transaction.get(currentUserRef)
@@ -133,6 +135,8 @@ export async function followUser(currentUserId, targetUserId) {
         return
       }
 
+      didFollow = true
+
       transaction.update(currentUserRef, {
         following: arrayUnion(targetUserId),
         followingCount: increment(1),
@@ -145,6 +149,14 @@ export async function followUser(currentUserId, targetUserId) {
         updatedAt: serverTimestamp(),
       })
     })
+
+    if (didFollow) {
+      await createFollowNotification(targetUserId, {
+        userId: currentUserId,
+        username: actor.username || actor.displayName || 'Someone',
+        userPhoto: actor.userPhoto || actor.photoURL || actor.avatar || '',
+      })
+    }
 
     return { following: true }
   } catch (error) {
