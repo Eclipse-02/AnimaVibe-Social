@@ -13,25 +13,25 @@ export function useInitializeAuth() {
       if (firebaseUser) {
         const serializableUser = {
           uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName || '',
-          photoURL: firebaseUser.photoURL || '',
-        }
-        setUser(serializableUser)
+          email: firebaseUser.email || '', // Google users might have null email if privacy settings
+          displayName: firebaseUser.displayName || firebaseUser.providerData[0]?.displayName || '',
+          photoURL: firebaseUser.photoURL || firebaseUser.providerData[0]?.photoURL || '',
+        };
+        setUser(serializableUser);
 
         try {
-          const profile = await getUserProfile(firebaseUser.uid)
+          const profile = await getUserProfile(firebaseUser.uid);
           if (profile) {
-            setUserProfile(profile)
+            setUserProfile(profile);
           }
         } catch (err) {
-          console.error('[useInitializeAuth] Error fetching user profile:', err)
+          console.error('[useInitializeAuth] Error fetching user profile:', err);
         }
       } else {
-        setUser(null)
-        setUserProfile(null)
+        setUser(null);
+        setUserProfile(null);
       }
-    })
+    });
 
     return unsubscribe
   }, [setUser, setUserProfile])
