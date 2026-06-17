@@ -1,9 +1,12 @@
 import React, { useState } from 'react'
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native'
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch, Keyboard } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Feather } from '@expo/vector-icons'
 import { storage, auth } from '../config/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { serverTimestamp } from 'firebase/firestore'
+import { createPost } from '../services/posts'
+import { useAuthStore } from '../store/useAuthStore'
 
 export default function CreatePostScreen({ navigation }) {
   const user = useAuthStore((state) => state.user)
@@ -273,6 +276,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 0
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20
+  },
+  warningText: {
+    color: '#ffffff',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24
   },
   header: {
     flexDirection: 'row',
