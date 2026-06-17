@@ -1,12 +1,15 @@
 import React, { useState } from 'react'
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native'
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch, Keyboard } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { Feather } from '@expo/vector-icons'
 import { storage, auth } from '../config/firebase'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { serverTimestamp } from 'firebase/firestore'
 import { createPost } from '../services/posts'
+import { useAuthStore } from '../store/useAuthStore'
 
 export default function CreatePostScreen({ navigation }) {
+  const user = useAuthStore((state) => state.user)
   const [caption, setCaption] = useState('')
   const [image, setImage] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -74,11 +77,17 @@ export default function CreatePostScreen({ navigation }) {
 
   const handleShare = async () => {
     if (!image) {
-      Alert.alert('Error', 'Pilih foto terlebih dahulu sebelum membagikan postingan!')
+      Alert.alert('Peringatan', 'Kamu wajib memilih gambar terlebih dahulu!')
+      return
+    }
+
+    if (!user?.uid) {
+      Alert.alert('Akses Ditolak', 'Kamu harus login untuk membuat postingan.')
       return
     }
 
     setIsSubmitting(true)
+    Keyboard.dismiss()
 
     try {
       const downloadUrl = await uploadImageAsync(image)
@@ -89,6 +98,9 @@ export default function CreatePostScreen({ navigation }) {
         userPhoto: auth.currentUser?.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb',
         imageUrl: downloadUrl,
         caption: caption.trim(),
+        likeCount: 0,
+        commentCount: 0,
+        createdAt: serverTimestamp()
       })
 
       setCaption('')
@@ -97,13 +109,33 @@ export default function CreatePostScreen({ navigation }) {
       setTwitterSwitch(false)
       
       Alert.alert('Sukses', 'Postingan kamu berhasil dibagikan!', [
-        { text: 'OK', onPress: () => navigation.navigate('FeedTab') }
+        {
+          text: 'OK',
+          onPress: () => {
+            setCaption('')
+            setImage(null)
+            if (navigation.canGoBack()) {
+              navigation.goBack()
+            }
+          }
+        }
       ])
     } catch (error) {
-      Alert.alert('Upload Gagal', error.message)
+      console.error(error)
+      Alert.alert('Gagal', 'Terjadi kesalahan: ' + error.message)
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (!user) {
+    return (
+      <SafeAreaView style={[styles.container, styles.center]}>
+        <Text style={styles.warningText}>
+          Silakan masuk ke akun kamu terlebih dahulu untuk membagikan postingan baru.
+        </Text>
+      </SafeAreaView>
+    )
   }
 
   return (
@@ -243,7 +275,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000000',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 0
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20
+  },
+  warningText: {
+    color: '#ffffff',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24
   },
   header: {
     flexDirection: 'row',
@@ -303,8 +346,12 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: '100%',
-    height: '100%',
-    resizeMode: 'cover'
+    height: '100%'
+  },
+  placeholderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
   aspectRatioPill: {
     position: 'absolute',

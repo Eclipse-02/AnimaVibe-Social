@@ -9,12 +9,12 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA0oQSqfPpkLBeXEbeli9e_QYIBwLNdKwE",
-  authDomain: "animavibe-social.firebaseapp.com",
-  projectId: "animavibe-social",
-  storageBucket: "animavibe-social.firebasestorage.app",
-  messagingSenderId: "213934092562",
-  appId: "1:213934092562:web:6cafc7a72f411b40b043cb"
+  apiKey: "AIzaSyAfVyuy21PNbAqbp25dYZcKvrZXprcwBGM",
+  authDomain: "animavibe-social-e32e7.firebaseapp.com",
+  projectId: "animavibe-social-e32e7",
+  storageBucket: "animavibe-social-e32e7.firebasestorage.app",
+  messagingSenderId: "864208355889",
+  appId: "1:864208355889:web:dcb3007ca455b5a9a48b10"
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();

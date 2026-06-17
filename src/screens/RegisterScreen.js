@@ -1,12 +1,68 @@
-import React from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import React, { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useAuth } from '../hooks/useAuth'
+import { useGoogleAuth } from '../hooks/useGoogleAuth'
 
 export default function RegisterScreen({ navigation }) {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const { register } = useAuth()
+  const { signInWithGoogle, loading: googleLoading, error: googleError } = useGoogleAuth()
+
+  const handleSignUp = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Validation Error', 'Please enter your full name')
+      return
+    }
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email')
+      return
+    }
+    if (!password.trim()) {
+      Alert.alert('Validation Error', 'Please enter a password')
+      return
+    }
+    if (password.length < 6) {
+      Alert.alert('Validation Error', 'Password must be at least 6 characters')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await register(email.trim(), password, fullName.trim())
+      Alert.alert('Success', 'Account created successfully!')
+      setFullName('')
+      setEmail('')
+      setPassword('')
+    } catch (error) {
+      Alert.alert('Registration Error', error.message || 'Failed to create account')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleSignUp = async () => {
+    const result = await signInWithGoogle()
+    if (!result.success) {
+      Alert.alert('Google Sign-Up Failed', result.error || 'An error occurred during Google sign up')
+    }
+    // On success, Firebase creates the account automatically
+    // The useInitializeAuth hook will handle navigation to the main app
+  }
+
+  useEffect(() => {
+    if (googleError) {
+      Alert.alert('Google Sign-Up Error', googleError)
+    }
+  }, [googleError])
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Header Bagian Atas */}
         <Text style={styles.title}>Create an account</Text>
         <Text style={styles.subtitle}>Join Social App today</Text>
@@ -14,31 +70,48 @@ export default function RegisterScreen({ navigation }) {
         {/* Form Input */}
         <View style={styles.formContainer}>
           <Text style={styles.label}>Full Name</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="Enter your full name" 
-            placeholderTextColor="#777777" 
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your full name"
+            placeholderTextColor="#777777"
+            value={fullName}
+            onChangeText={setFullName}
+            editable={!isLoading}
           />
 
           <Text style={styles.label}>Email</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="Enter your email" 
-            placeholderTextColor="#777777" 
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your email"
+            placeholderTextColor="#777777"
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            editable={!isLoading}
           />
-          
+
           <Text style={styles.label}>Password</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="Create a password" 
-            placeholderTextColor="#777777" 
-            secureTextEntry 
+          <TextInput
+            style={styles.input}
+            placeholder="Create a password"
+            placeholderTextColor="#777777"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!isLoading}
           />
-          
-          <TouchableOpacity style={styles.mainButton}>
-            <Text style={styles.mainButtonText}>Sign up</Text>
+
+          <TouchableOpacity
+            style={[styles.mainButton, isLoading && styles.mainButtonDisabled]}
+            onPress={handleSignUp}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <Text style={styles.mainButtonText}>Sign up</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -50,8 +123,16 @@ export default function RegisterScreen({ navigation }) {
         </View>
 
         {/* Tombol Social Media */}
-        <TouchableOpacity style={styles.outlineButton}>
-          <Text style={styles.outlineButtonText}>Sign up with Google</Text>
+        <TouchableOpacity
+          style={[styles.outlineButton, googleLoading && styles.outlineButtonDisabled]}
+          onPress={handleGoogleSignUp}
+          disabled={googleLoading}
+        >
+          {googleLoading ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text style={styles.outlineButtonText}>Sign up with Google</Text>
+          )}
         </TouchableOpacity>
 
         {/* Tombol Pindah ke Login */}
@@ -116,6 +197,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8
+  },
+  mainButtonDisabled: {
+    backgroundColor: '#888888',
+    opacity: 0.7
   },
   mainButtonText: {
     color: '#000000',

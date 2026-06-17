@@ -1,14 +1,63 @@
-import React, { useState } from 'react'
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native'
+import React, { useState, useEffect } from 'react'
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useAuth } from '../hooks/useAuth'
+import { useGoogleAuth } from '../hooks/useGoogleAuth'
 
 export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [isChecked, setIsChecked] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const { login } = useAuth()
+  const { signInWithGoogle, loading: googleLoading, error: googleError } = useGoogleAuth()
+
+  const handleLogin = async () => {
+    if (!email.trim()) {
+      Alert.alert('Validation Error', 'Please enter your email')
+      return
+    }
+    if (!password.trim()) {
+      Alert.alert('Validation Error', 'Please enter your password')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      await login(email.trim(), password)
+      Alert.alert('Success', 'Logged in successfully!')
+      setEmail('')
+      setPassword('')
+    } catch (error) {
+      Alert.alert('Login Error', error.message || 'Failed to log in')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    const result = await signInWithGoogle()
+    if (!result.success) {
+      Alert.alert('Google Sign-In Failed', result.error || 'An error occurred during Google sign in')
+    }
+    // On success, the useInitializeAuth hook will automatically handle the navigation
+    // No need to navigate manually
+  }
+
+  const handleForgotPassword = () => {
+    navigation.navigate('ForgotPassword')
+
+    React.useEffect(() => {
+      if (googleError) {
+        Alert.alert('Google Sign-In Error', googleError)
+      }
+    }, [googleError])
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+
         {/* Header Bagian Atas */}
         <View style={styles.logoBox} />
         <Text style={styles.title}>Social App</Text>
@@ -17,41 +66,56 @@ export default function LoginScreen({ navigation }) {
         {/* Form Input */}
         <View style={styles.formContainer}>
           <Text style={styles.label}>Email</Text>
-          <TextInput 
-            style={styles.input} 
-            placeholder="Enter your email" 
-            placeholderTextColor="#777777" 
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your email"
+            placeholderTextColor="#777777"
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            editable={!isLoading}
           />
-          
+
           <View style={styles.passwordHeader}>
             <Text style={styles.label}>Password</Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={handleForgotPassword}>
               <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
-          <TextInput 
-            style={styles.input} 
-            placeholder="Enter your password" 
-            placeholderTextColor="#777777" 
-            secureTextEntry 
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your password"
+            placeholderTextColor="#777777"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            editable={!isLoading}
           />
 
           {/* Remember Me Checkbox (Custom UI) */}
-          <TouchableOpacity 
-            style={styles.checkboxContainer} 
+          <TouchableOpacity
+            style={styles.checkboxContainer}
             activeOpacity={0.8}
             onPress={() => setIsChecked(!isChecked)}
+            disabled={isLoading}
           >
             <View style={[styles.checkbox, isChecked && styles.checkboxActive]}>
               {isChecked && <Text style={styles.checkmark}>✓</Text>}
             </View>
             <Text style={styles.checkboxLabel}>Remember me</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.mainButton}>
-            <Text style={styles.mainButtonText}>Log in</Text>
+
+          <TouchableOpacity
+            style={[styles.mainButton, isLoading && styles.mainButtonDisabled]}
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <Text style={styles.mainButtonText}>Log in</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -63,8 +127,16 @@ export default function LoginScreen({ navigation }) {
         </View>
 
         {/* Tombol Social Media */}
-        <TouchableOpacity style={styles.outlineButton}>
-          <Text style={styles.outlineButtonText}>Continue with Google</Text>
+        <TouchableOpacity
+          style={[styles.outlineButton, googleLoading && styles.outlineButtonDisabled]}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading}
+        >
+          {googleLoading ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text style={styles.outlineButtonText}>Continue with Google</Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.outlineButton}>
           <Text style={styles.outlineButtonText}>Continue with SSO</Text>
@@ -80,7 +152,7 @@ export default function LoginScreen({ navigation }) {
 
       </ScrollView>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -180,6 +252,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center'
   },
+  mainButtonDisabled: {
+    backgroundColor: '#888888',
+    opacity: 0.7
+  },
   mainButtonText: {
     color: '#000000',
     fontWeight: 'bold',
@@ -213,6 +289,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14
   },
+  outlineButtonDisabled: {
+    opacity: 0.5,
+  },
   footerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -226,5 +305,5 @@ const styles = StyleSheet.create({
     color: '#3b82f6',
     fontSize: 14,
     fontWeight: 'bold'
-  }
+  },
 })

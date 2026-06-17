@@ -15,6 +15,7 @@ import {
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
+import { createLikeNotification } from './notifications'
 
 function formatLikesCount(count = 0) {
   if (count >= 1000000) {
@@ -131,7 +132,7 @@ export async function getFeedPosts(options = {}) {
  * @param {string} userId Firebase Auth user id.
  * @returns {Promise<Object>} Updated like status.
  */
-export async function toggleLikePost(postId, userId) {
+export async function toggleLikePost(postId, userId, actor = {}) {
   try {
     if (!postId || !userId) {
       throw new Error('Post id and user id are required to toggle like.')
@@ -140,6 +141,7 @@ export async function toggleLikePost(postId, userId) {
     const postRef = doc(db, 'posts', postId)
     let liked = false
     let likesCount = 0
+    let postData = null
 
     await runTransaction(db, async (transaction) => {
       const postSnap = await transaction.get(postRef)
@@ -148,7 +150,10 @@ export async function toggleLikePost(postId, userId) {
         throw new Error('Post was not found.')
       }
 
-      const postData = postSnap.data()
+      postData = {
+        id: postSnap.id,
+        ...postSnap.data(),
+      }
       const likedBy = postData.likedBy || []
       const alreadyLiked = likedBy.includes(userId)
 
@@ -161,6 +166,14 @@ export async function toggleLikePost(postId, userId) {
         updatedAt: serverTimestamp(),
       })
     })
+
+    if (liked && postData?.userId && postData.userId !== userId) {
+      await createLikeNotification(postData, {
+        userId,
+        username: actor.username || actor.displayName || 'Someone',
+        userPhoto: actor.userPhoto || actor.photoURL || actor.avatar || '',
+      })
+    }
 
     return {
       liked,

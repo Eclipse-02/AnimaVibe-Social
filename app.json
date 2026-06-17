@@ -12,7 +12,9 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.AnimaVibeSocial",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,13 +23,24 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.AnimaVibeSocial"
+      "package": "com.anonymous.AnimaVibeSocial",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-image"
+      "expo-image",
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosClientId": "864208355889-463si70hu2tddrbg1el3gblim4ed0gp4.apps.googleusercontent.com",
+          "webClientId": "864208355889-2972qm34bdfguk9ken2ijmfnvub3vf3o.apps.googleusercontent.com",
+          "iosUrlScheme": "com.googleusercontent.apps.864208355889-463si70hu2tddrbg1el3gblim4ed0gp4"
+        }
+      ]
     ]
   }
 }
