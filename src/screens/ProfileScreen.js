@@ -4,9 +4,10 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/useAuthStore';
-import { db, storage } from '../config/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { db, storage, auth } from '../config/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { updateProfile } from 'firebase/auth';
 
 function ProfileScreen() {
   const { logout } = useAuth();
@@ -75,7 +76,6 @@ function ProfileScreen() {
       }
 
       const userRef = doc(db, 'users', userProfile.uid);
-      
       const updatedData = {
         username: username.trim().toLowerCase(),
         displayName: displayName.trim(),
@@ -83,7 +83,14 @@ function ProfileScreen() {
         photoURL: finalDownloadURL
       };
 
-      await updateDoc(userRef, updatedData);
+      await setDoc(userRef, updatedData, { merge: true });
+
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: displayName.trim(),
+          photoURL: finalDownloadURL
+        });
+      }
 
       setUser({
         ...userProfile,
@@ -109,7 +116,6 @@ function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.profileHeader}>
-        
         {isEditing ? (
           <View style={styles.editForm}>
             <Text style={styles.formTitle}>Edit profil</Text>
@@ -150,7 +156,7 @@ function ProfileScreen() {
                 placeholder="Nama"
                 placeholderTextColor="#666666"
                 value={displayName}
-                onChangeText={displayName => setDisplayName(displayName)}
+                onChangeText={setDisplayName}
                 editable={!isSaving}
               />
             </View>
@@ -243,7 +249,7 @@ function ProfileScreen() {
         </View>
       </View>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -264,7 +270,6 @@ const styles = StyleSheet.create({
   statBox: { alignItems: 'center' },
   statNum: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   statLabel: { color: '#555', fontSize: 12, marginTop: 2 },
-  
   editForm: { width: '100%', paddingHorizontal: 8 },
   formTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 24, textAlign: 'left' },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
