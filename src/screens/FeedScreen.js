@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar, ActivityIndicator } from 'react-native'
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, ActivityIndicator } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons'
 import PostCard from '../components/PostCard'
@@ -15,6 +16,7 @@ const DUMMY_STORIES = [
 ]
 
 export default function FeedScreen({ navigation }) {
+  const insets = useSafeAreaInsets()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -89,7 +91,7 @@ export default function FeedScreen({ navigation }) {
   )
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       {loading ? (
         <View style={styles.centerLoading}>
           <ActivityIndicator size="large" color="#a855f7" />
@@ -108,12 +110,12 @@ export default function FeedScreen({ navigation }) {
           }
         />
       )}
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+  container: { flex: 1, backgroundColor: '#000000' },
   centerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyContainer: { padding: 40, alignItems: 'center' },
   emptyText: { color: '#666666', fontSize: 14, textAlign: 'center' },

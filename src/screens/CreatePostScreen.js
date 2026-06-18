@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, SafeAreaView, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch, Keyboard } from 'react-native'
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Image, Platform, StatusBar, ScrollView, Alert, ActivityIndicator, Switch, Keyboard } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import { Feather } from '@expo/vector-icons'
 import { storage } from '../config/firebase'
@@ -267,7 +268,7 @@ export default function CreatePostScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 0 },
+  container: { flex: 1, backgroundColor: '#000000' },
   center: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
   warningText: { color: '#ffffff', fontSize: 16, textAlign: 'center', lineHeight: 24 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#111111' },
