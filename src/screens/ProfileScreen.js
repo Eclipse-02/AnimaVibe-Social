@@ -9,6 +9,7 @@ import { db, storage, auth } from '../config/firebase';
 import { doc, setDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
+import { useNavigation } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = width / 3;
@@ -32,6 +33,7 @@ function mapPostDoc(postDoc) {
 
 function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const { logout } = useAuth();
   const user = useAuthStore((state) => state.user);
   const userProfile = useAuthStore((state) => state.userProfile);
@@ -210,7 +212,20 @@ function ProfileScreen() {
   );
 
   const renderGridItem = ({ item }) => (
-    <TouchableOpacity activeOpacity={0.9} style={styles.gridItem}>
+    <TouchableOpacity 
+      activeOpacity={0.9} 
+      style={styles.gridItem}
+      onPress={() => {
+  const parent = navigation.getParent();
+
+  if (parent) {
+    parent.navigate('FeedTab', {
+      screen: 'PostDetail',
+      params: { post: item }
+    });
+  }
+}}
+    >
       <Image source={{ uri: item.imageUrl }} style={styles.gridImage} cachePolicy="disk" />
     </TouchableOpacity>
   );
