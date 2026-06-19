@@ -1,13 +1,15 @@
 import React, { useState, useRef } from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, TouchableWithoutFeedback, Animated } from 'react-native'
+import { StyleSheet, View, Text, TouchableOpacity, TouchableWithoutFeedback, Animated, Share } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
+import { useNavigation } from '@react-navigation/native'
 
 export default function PostCard({ post }) {
   const [liked, setLiked] = useState(post.isLikedByUser || false)
   const [likeCount, setLikeCount] = useState(post.likes || 0)
   const lastTap = useRef(0)
   const scaleValue = useRef(new Animated.Value(0)).current
+  const navigation = useNavigation()
 
   const triggerLikeAnimation = () => {
     scaleValue.setValue(0)
@@ -29,6 +31,16 @@ export default function PostCard({ post }) {
       triggerLikeAnimation()
     } else {
       lastTap.current = now
+    }
+  }
+
+  const onShare = async () => {
+    try {
+      await Share.share({
+        message: `Check out this post by ${post.username}: ${post.caption}`,
+      })
+    } catch (error) {
+      console.log(error.message)
     }
   }
 
@@ -72,11 +84,11 @@ export default function PostCard({ post }) {
               </Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn}>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Comments', { postId: post.id })}>
             <Ionicons name="chatbubble-outline" size={26} color="#ffffff" />
             <Text style={styles.actionText}>{post.commentsCount || 0}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn}>
+          <TouchableOpacity style={styles.actionBtn} onPress={onShare}>
             <Ionicons name="share-social-outline" size={26} color="#ffffff" />
           </TouchableOpacity>
         </View>

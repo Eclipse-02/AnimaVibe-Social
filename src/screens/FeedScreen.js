@@ -58,7 +58,7 @@ export default function FeedScreen({ navigation }) {
       </View>
       <Text style={styles.storyUsername} numberOfLines={1}>{item.user}</Text>
     </TouchableOpacity>
-  )
+  );
 
   const FeedHeader = () => (
     <View style={styles.headerSection}>
@@ -88,7 +88,7 @@ export default function FeedScreen({ navigation }) {
         />
       </View>
     </View>
-  )
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
