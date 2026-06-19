@@ -22,12 +22,14 @@ export default function FeedScreen({ navigation }) {
     const postsRef = collection(db, 'posts')
     const q = query(postsRef, orderBy('createdAt', 'desc'))
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedPosts = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timeAgo: doc.data().createdAt ? 'Baru saja' : 'Mengupload...' 
-      }))
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: false }, (snapshot) => {
+      const fetchedPosts = snapshot.docs
+        .filter(doc => doc.data().createdAt !== null)
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data(),
+          timeAgo: 'Baru saja',
+        }))
       setPosts(fetchedPosts)
       setLoading(false)
     }, (error) => {
@@ -39,8 +41,8 @@ export default function FeedScreen({ navigation }) {
   }, [])
 
   const renderStory = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.storyContainer} 
+    <TouchableOpacity
+      style={styles.storyContainer}
       activeOpacity={0.8}
       onPress={() => navigation.navigate('StoryScreen')}
     >
@@ -72,7 +74,7 @@ export default function FeedScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-      
+
       <View style={styles.storiesWrapper}>
         <FlatList
           data={DUMMY_STORIES}
@@ -129,5 +131,5 @@ const styles = StyleSheet.create({
   myStoryRing: { borderColor: '#333333' },
   storyAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1a1a1a' },
   addStoryBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#a855f7', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#000000' },
-  storyUsername: { color: '#ffffff', fontSize: 11, marginTop: 8, textAlign: 'center' }
+  storyUsername: { color: '#ffffff', fontSize: 11, marginTop: 8, textAlign: 'center' },
 })

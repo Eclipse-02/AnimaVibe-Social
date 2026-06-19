@@ -11,15 +11,16 @@ import { updateProfile } from 'firebase/auth';
 
 function ProfileScreen() {
   const { logout } = useAuth();
-  const userProfile = useAuthStore((state) => state.user);
+  const user = useAuthStore((state) => state.user);
+  const userProfile = useAuthStore((state) => state.userProfile);
   const isLoading = useAuthStore((state) => state.isLoading);
-  const setUser = useAuthStore((state) => state.setUser);
+  const setUserProfile = useAuthStore((state) => state.setUserProfile);
 
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState(userProfile?.username || '');
-  const [displayName, setDisplayName] = useState(userProfile?.displayName || '');
+  const [displayName, setDisplayName] = useState(userProfile?.displayName || user?.displayName || '');
   const [bio, setBio] = useState(userProfile?.bio || '');
-  const [avatarUri, setAvatarUri] = useState(userProfile?.photoURL || null);
+  const [avatarUri, setAvatarUri] = useState(userProfile?.photoURL || user?.photoURL || null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleLogout = async () => {
@@ -63,25 +64,30 @@ function ProfileScreen() {
     Keyboard.dismiss();
 
     try {
-      let finalDownloadURL = avatarUri;
+      const currentUid = userProfile?.uid || user?.uid;
+      let finalDownloadURL = userProfile?.photoURL || user?.photoURL || '';
 
-      if (avatarUri && avatarUri !== userProfile?.photoURL) {
+      if (avatarUri && avatarUri !== userProfile?.photoURL && avatarUri !== user?.photoURL) {
         const response = await fetch(avatarUri);
         const blob = await response.blob();
-        const filename = `avatars/${userProfile.uid}_avatar.jpg`;
+        const filename = `avatars/${currentUid}_avatar.jpg`;
         const storageRef = ref(storage, filename);
         
         await uploadBytes(storageRef, blob);
         finalDownloadURL = await getDownloadURL(storageRef);
       }
 
-      const userRef = doc(db, 'users', userProfile.uid);
+      const userRef = doc(db, 'users', currentUid);
       const updatedData = {
         ...userProfile,
+        uid: currentUid,
         username: username.trim().toLowerCase(),
         displayName: displayName.trim(),
         bio: bio.trim(),
-        photoURL: finalDownloadURL
+        photoURL: finalDownloadURL,
+        postCount: userProfile?.postCount || 0,
+        followerCount: userProfile?.followerCount || 0,
+        followingCount: userProfile?.followingCount || 0
       };
 
       await setDoc(userRef, updatedData, { merge: true });
@@ -93,7 +99,7 @@ function ProfileScreen() {
         });
       }
 
-      setUser(updatedData);
+      setUserProfile(updatedData);
 
       setIsEditing(false);
       Alert.alert('Sukses', 'Profil berhasil diperbarui!');
@@ -106,8 +112,8 @@ function ProfileScreen() {
   };
 
   const getInitial = () => {
-    if (displayName) return displayName.charAt(0).toUpperCase();
-    if (username) return username.charAt(0).toUpperCase();
+    if (userProfile?.displayName || user?.displayName) return (userProfile?.displayName || user?.displayName).charAt(0).toUpperCase();
+    if (userProfile?.username) return userProfile.username.charAt(0).toUpperCase();
     return '?';
   };
 
@@ -178,9 +184,9 @@ function ProfileScreen() {
                 style={[styles.actionBtn, styles.cancelBtn]} 
                 onPress={() => {
                   setUsername(userProfile?.username || '');
-                  setDisplayName(userProfile?.displayName || '');
+                  setDisplayName(userProfile?.displayName || user?.displayName || '');
                   setBio(userProfile?.bio || '');
-                  setAvatarUri(userProfile?.photoURL || null);
+                  setAvatarUri(userProfile?.photoURL || user?.photoURL || null);
                   setIsEditing(false);
                 }}
                 disabled={isSaving}
@@ -204,15 +210,15 @@ function ProfileScreen() {
         ) : (
           <>
             <View style={styles.avatarContainer}>
-              {userProfile?.photoURL ? (
-                <Image source={{ uri: userProfile.photoURL }} style={styles.avatarImage} />
+              {(userProfile?.photoURL || user?.photoURL) ? (
+                <Image source={{ uri: userProfile?.photoURL || user?.photoURL }} style={styles.avatarImage} />
               ) : (
                 <View style={styles.avatarPlaceholder}>
                   <Text style={styles.avatarInitial}>{getInitial()}</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.name}>{userProfile?.displayName || 'User'}</Text>
+            <Text style={styles.name}>{userProfile?.displayName || user?.displayName || 'User'}</Text>
             <Text style={styles.usernameDisplay}>@{userProfile?.username || 'username'}</Text>
             <Text style={styles.bio}>{userProfile?.bio || 'Connect with your inner vibe'}</Text>
 
