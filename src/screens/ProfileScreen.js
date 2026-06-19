@@ -1,15 +1,37 @@
-import React, { memo, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, SafeAreaView, ActivityIndicator, TextInput, Alert, Keyboard } from 'react-native';
+import React, { memo, useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, TextInput, Alert, Keyboard, FlatList, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, storage, auth } from '../config/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
 
+const { width } = Dimensions.get('window');
+const COLUMN_WIDTH = width / 3;
+
+function mapPostDoc(postDoc) {
+  const data = postDoc.data()
+  const imageUrl = data.imageUrl || data.image || ''
+  const userPhoto = data.userPhoto || data.avatar || ''
+  const likesCount = data.likesCount || 0
+
+  return {
+    id: postDoc.id,
+    ...data,
+    image: imageUrl,
+    imageUrl,
+    avatar: userPhoto,
+    userPhoto,
+    likesCount,
+  }
+}
+
 function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { logout } = useAuth();
   const user = useAuthStore((state) => state.user);
   const userProfile = useAuthStore((state) => state.userProfile);
@@ -22,6 +44,32 @@ function ProfileScreen() {
   const [bio, setBio] = useState(userProfile?.bio || '');
   const [avatarUri, setAvatarUri] = useState(userProfile?.photoURL || user?.photoURL || null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [userPosts, setUserPosts] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+
+  useEffect(() => {
+    const currentUid = user?.uid || userProfile?.uid;
+    if (!currentUid) return;
+
+    const postsRef = collection(db, 'posts');
+    const q = query(
+      postsRef, 
+      where('userId', '==', currentUid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedPosts = snapshot.docs.map(mapPostDoc);
+      setUserPosts(fetchedPosts);
+      setLoadingPosts(false);
+    }, (error) => {
+      console.error(error);
+      setLoadingPosts(false);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid, userProfile?.uid]);
 
   const handleLogout = async () => {
     try {
@@ -117,129 +165,36 @@ function ProfileScreen() {
     return '?';
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.profileHeader}>
-        {isEditing ? (
-          <View style={styles.editForm}>
-            <Text style={styles.formTitle}>Edit profil</Text>
-            <View style={styles.avatarSection}>
-              <TouchableOpacity onPress={pickAvatar} disabled={isSaving} style={styles.avatarWrapper}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarImageLarge} />
-                ) : (
-                  <View style={[styles.avatarPlaceholderLarge, { backgroundColor: '#333' }]}>
-                    <Text style={styles.avatarInitialLarge}>{getInitial()}</Text>
-                  </View>
-                )}
-                <View style={styles.editIconBadge}>
-                  <Text style={styles.editIconText}>✎</Text>
-                </View>
-              </TouchableOpacity>
-              <Text style={styles.sectionLabel}>Foto profil</Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.fieldLabel}>Nama pengguna</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Nama pengguna"
-                placeholderTextColor="#666666"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                editable={!isSaving}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.fieldLabel}>Nama</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Nama"
-                placeholderTextColor="#666666"
-                value={displayName}
-                onChangeText={setDisplayName}
-                editable={!isSaving}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.fieldLabel}>Bio</Text>
-              <TextInput
-                style={[styles.input, styles.bioInput]}
-                placeholder="Tulis bio vibe-mu di sini..."
-                placeholderTextColor="#666666"
-                multiline
-                maxLength={80}
-                value={bio}
-                onChangeText={setBio}
-                editable={!isSaving}
-              />
-              <Text style={styles.charCounter}>{bio.length}/80</Text>
-            </View>
-            
-            <View style={styles.actionRow}>
-              <TouchableOpacity 
-                style={[styles.actionBtn, styles.cancelBtn]} 
-                onPress={() => {
-                  setUsername(userProfile?.username || '');
-                  setDisplayName(userProfile?.displayName || user?.displayName || '');
-                  setBio(userProfile?.bio || '');
-                  setAvatarUri(userProfile?.photoURL || user?.photoURL || null);
-                  setIsEditing(false);
-                }}
-                disabled={isSaving}
-              >
-                <Text style={styles.cancelBtnText}>Batal</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={[styles.actionBtn, styles.saveBtn]} 
-                onPress={handleSave}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#000000" />
-                ) : (
-                  <Text style={styles.saveBtnText}>Simpan</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+  const ProfileHeaderComponent = () => (
+    <View style={styles.profileHeader}>
+      <View style={styles.avatarContainer}>
+        {(userProfile?.photoURL || user?.photoURL) ? (
+          <Image source={{ uri: userProfile?.photoURL || user?.photoURL }} style={styles.avatarImage} />
         ) : (
-          <>
-            <View style={styles.avatarContainer}>
-              {(userProfile?.photoURL || user?.photoURL) ? (
-                <Image source={{ uri: userProfile?.photoURL || user?.photoURL }} style={styles.avatarImage} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarInitial}>{getInitial()}</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.name}>{userProfile?.displayName || user?.displayName || 'User'}</Text>
-            <Text style={styles.usernameDisplay}>@{userProfile?.username || 'username'}</Text>
-            <Text style={styles.bio}>{userProfile?.bio || 'Connect with your inner vibe'}</Text>
-
-            <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
-              <Text style={styles.editBtnText}>Edit Profile</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={isLoading}>
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#ff4444" />
-              ) : (
-                <Text style={styles.logoutBtnText}>Log Out</Text>
-              )}
-            </TouchableOpacity>
-          </>
+          <View style={styles.avatarPlaceholder}>
+            <Text style={styles.avatarInitial}>{getInitial()}</Text>
+          </View>
         )}
       </View>
+      <Text style={styles.name}>{userProfile?.displayName || user?.displayName || 'User'}</Text>
+      <Text style={styles.usernameDisplay}>@{userProfile?.username || 'username'}</Text>
+      <Text style={styles.bio}>{userProfile?.bio || 'Connect with your inner vibe'}</Text>
+
+      <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
+        <Text style={styles.editBtnText}>Edit Profile</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={isLoading}>
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#ff4444" />
+        ) : (
+          <Text style={styles.logoutBtnText}>Log Out</Text>
+        )}
+      </TouchableOpacity>
 
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
-          <Text style={styles.statNum}>{userProfile?.postCount || 0}</Text>
+          <Text style={styles.statNum}>{userPosts.length}</Text>
           <Text style={styles.statLabel}>Posts</Text>
         </View>
         <View style={styles.statBox}>
@@ -251,13 +206,134 @@ function ProfileScreen() {
           <Text style={styles.statLabel}>Following</Text>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
+  );
+
+  const renderGridItem = ({ item }) => (
+    <TouchableOpacity activeOpacity={0.9} style={styles.gridItem}>
+      <Image source={{ uri: item.imageUrl }} style={styles.gridImage} cachePolicy="disk" />
+    </TouchableOpacity>
+  );
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {isEditing ? (
+        <FlatList
+          data={[]}
+          renderItem={null}
+          ListHeaderComponent={
+            <View style={styles.editForm}>
+              <Text style={styles.formTitle}>Edit profil</Text>
+              <View style={styles.avatarSection}>
+                <TouchableOpacity onPress={pickAvatar} disabled={isSaving} style={styles.avatarWrapper}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarImageLarge} />
+                  ) : (
+                    <View style={[styles.avatarPlaceholderLarge, { backgroundColor: '#333' }]}>
+                      <Text style={styles.avatarInitialLarge}>{getInitial()}</Text>
+                    </View>
+                  )}
+                  <View style={styles.editIconBadge}>
+                    <Text style={styles.editIconText}>✎</Text>
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.sectionLabel}>Foto profil</Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Nama pengguna</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nama pengguna"
+                  placeholderTextColor="#666666"
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  editable={!isSaving}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Nama</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Nama"
+                  placeholderTextColor="#666666"
+                  value={displayName}
+                  onChangeText={setDisplayName}
+                  editable={!isSaving}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.fieldLabel}>Bio</Text>
+                <TextInput
+                  style={[styles.input, styles.bioInput]}
+                  placeholder="Tulis bio vibe-mu di sini..."
+                  placeholderTextColor="#666666"
+                  multiline
+                  maxLength={80}
+                  value={bio}
+                  onChangeText={setBio}
+                  editable={!isSaving}
+                />
+                <Text style={styles.charCounter}>{bio.length}/80</Text>
+              </View>
+              
+              <View style={styles.actionRow}>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.cancelBtn]} 
+                  onPress={() => {
+                    setUsername(userProfile?.username || '');
+                    setDisplayName(userProfile?.displayName || user?.displayName || '');
+                    setBio(userProfile?.bio || '');
+                    setAvatarUri(userProfile?.photoURL || user?.photoURL || null);
+                    setIsEditing(false);
+                  }}
+                  disabled={isSaving}
+                >
+                  <Text style={styles.cancelBtnText}>Batal</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.actionBtn, styles.saveBtn]} 
+                  onPress={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#000000" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Simpan</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={userPosts}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          ListHeaderComponent={ProfileHeaderComponent}
+          renderItem={renderGridItem}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            !loadingPosts && (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>Belum ada postingan</Text>
+              </View>
+            )
+          }
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000', padding: 16 },
-  profileHeader: { alignItems: 'center', marginTop: 10, width: '100%' },
+  container: { flex: 1, backgroundColor: '#000000' },
+  profileHeader: { alignItems: 'center', marginTop: 10, width: '100%', paddingHorizontal: 16 },
   avatarContainer: { marginBottom: 12 },
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#333', borderWidth: 2, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
   avatarImage: { width: 90, height: 90, borderRadius: 45, borderWidth: 2, borderColor: '#fff' },
@@ -269,11 +345,15 @@ const styles = StyleSheet.create({
   editBtnText: { color: '#fff', fontWeight: '600' },
   logoutBtn: { backgroundColor: '#1a0d0d', borderWidth: 1, borderColor: '#5c1d1d', width: '80%', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 12, height: 40, justifyContent: 'center' },
   logoutBtnText: { color: '#ff4444', fontWeight: '600' },
-  statsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 30, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#111', paddingVertical: 12 },
+  statsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 30, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#111', paddingVertical: 12, width: '100%', marginBottom: 8 },
   statBox: { alignItems: 'center' },
   statNum: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   statLabel: { color: '#555', fontSize: 12, marginTop: 2 },
-  editForm: { width: '100%', paddingHorizontal: 8 },
+  gridItem: { width: COLUMN_WIDTH, height: COLUMN_WIDTH, padding: 1 },
+  gridImage: { width: '100%', height: '100%', backgroundColor: '#111' },
+  emptyContainer: { padding: 40, alignItems: 'center' },
+  emptyText: { color: '#666666', fontSize: 14 },
+  editForm: { width: '100%', paddingHorizontal: 24 },
   formTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 24, textAlign: 'left' },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
   avatarWrapper: { position: 'relative' },
