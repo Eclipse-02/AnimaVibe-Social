@@ -4,9 +4,10 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/useAuthStore';
-import { db, storage } from '../config/firebase';
+import { db, storage, auth } from '../config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { updateProfile } from 'firebase/auth';
 
 function ProfileScreen() {
   const { logout } = useAuth();
@@ -75,7 +76,6 @@ function ProfileScreen() {
       }
 
       const userRef = doc(db, 'users', userProfile.uid);
-      
       const updatedData = {
         ...userProfile,
         username: username.trim().toLowerCase(),
@@ -85,6 +85,13 @@ function ProfileScreen() {
       };
 
       await setDoc(userRef, updatedData, { merge: true });
+
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, {
+          displayName: displayName.trim(),
+          photoURL: finalDownloadURL
+        });
+      }
 
       setUser(updatedData);
 
