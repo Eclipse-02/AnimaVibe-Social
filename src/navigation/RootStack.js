@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import AuthStack from './AuthStack'
 import MainTabs from './MainTabs'
 import StoryScreen from '../screens/StoryScreen'
+import CommentsScreen from '../screens/CommentsScreen'
 import { useAuthStore } from '../store/useAuthStore'
 import { useInitializeAuth } from '../hooks/useInitializeAuth'
 
@@ -35,6 +36,7 @@ export default function RootStack() {
             component={StoryScreen} 
             options={{ animation: 'fade' }} 
           />
+          <Stack.Screen name="Comments" component={CommentsScreen} />
         </>
       ) : (
         <Stack.Screen name="Auth" component={AuthStack} />

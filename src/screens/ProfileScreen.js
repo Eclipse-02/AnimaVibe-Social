@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, storage } from '../config/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 function ProfileScreen() {
@@ -62,7 +62,7 @@ function ProfileScreen() {
     Keyboard.dismiss();
 
     try {
-      let finalDownloadURL = userProfile?.photoURL || '';
+      let finalDownloadURL = avatarUri;
 
       if (avatarUri && avatarUri !== userProfile?.photoURL) {
         const response = await fetch(avatarUri);
@@ -77,18 +77,16 @@ function ProfileScreen() {
       const userRef = doc(db, 'users', userProfile.uid);
       
       const updatedData = {
+        ...userProfile,
         username: username.trim().toLowerCase(),
         displayName: displayName.trim(),
         bio: bio.trim(),
         photoURL: finalDownloadURL
       };
 
-      await updateDoc(userRef, updatedData);
+      await setDoc(userRef, updatedData, { merge: true });
 
-      setUser({
-        ...userProfile,
-        ...updatedData
-      });
+      setUser(updatedData);
 
       setIsEditing(false);
       Alert.alert('Sukses', 'Profil berhasil diperbarui!');
@@ -101,19 +99,17 @@ function ProfileScreen() {
   };
 
   const getInitial = () => {
-    if (userProfile?.displayName) return userProfile.displayName.charAt(0).toUpperCase();
-    if (userProfile?.username) return userProfile.username.charAt(0).toUpperCase();
+    if (displayName) return displayName.charAt(0).toUpperCase();
+    if (username) return username.charAt(0).toUpperCase();
     return '?';
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.profileHeader}>
-        
         {isEditing ? (
           <View style={styles.editForm}>
             <Text style={styles.formTitle}>Edit profil</Text>
-
             <View style={styles.avatarSection}>
               <TouchableOpacity onPress={pickAvatar} disabled={isSaving} style={styles.avatarWrapper}>
                 {avatarUri ? (
@@ -150,7 +146,7 @@ function ProfileScreen() {
                 placeholder="Nama"
                 placeholderTextColor="#666666"
                 value={displayName}
-                onChangeText={displayName => setDisplayName(displayName)}
+                onChangeText={setDisplayName}
                 editable={!isSaving}
               />
             </View>
@@ -243,7 +239,7 @@ function ProfileScreen() {
         </View>
       </View>
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -264,7 +260,6 @@ const styles = StyleSheet.create({
   statBox: { alignItems: 'center' },
   statNum: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   statLabel: { color: '#555', fontSize: 12, marginTop: 2 },
-  
   editForm: { width: '100%', paddingHorizontal: 8 },
   formTitle: { color: '#ffffff', fontSize: 20, fontWeight: 'bold', marginBottom: 24, textAlign: 'left' },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
