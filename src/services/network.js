@@ -14,6 +14,9 @@ export function startNetworkListener() {
   if (unsubscribe) return unsubscribe
 
   unsubscribe = NetInfo.addEventListener(updateNetworkState)
+  NetInfo.fetch().then(updateNetworkState).catch((error) => {
+    console.warn('Failed to get initial network state:', error)
+  })
 
   return () => {
     unsubscribe?.()
