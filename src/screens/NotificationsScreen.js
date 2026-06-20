@@ -1,89 +1,73 @@
-import React from 'react'
-import { View, Text, StyleSheet, ScrollView } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { Image } from 'expo-image'
+import React from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
+
+const DUMMY_DATA = [
+  {
+    id: '1',
+    title: 'New',
+    data: [
+      { id: 'n1', actorName: 'rafa_dev', message: 'liked your photo.', time: '2m', type: 'like', actorPhoto: 'https://picsum.photos/200' },
+      { id: 'n2', actorName: 'andika', message: 'started following you.', time: '15m', type: 'follow', actorPhoto: 'https://picsum.photos/201' },
+    ]
+  },
+  {
+    id: '2',
+    title: 'Earlier',
+    data: [
+      { id: 'e1', actorName: 'maya', message: 'commented on your post.', time: '1h', type: 'comment', actorPhoto: 'https://picsum.photos/202' },
+      { id: 'e2', actorName: 'neon_ghost', message: 'liked your photo.', time: '3h', type: 'like', actorPhoto: 'https://picsum.photos/203' },
+    ]
+  }
+];
 
 export default function NotificationsScreen() {
+  const renderSection = ({ item }) => (
+    <View>
+      <Text style={styles.sectionTitle}>{item.title}</Text>
+      {item.data.map((notif) => (
+        <View key={notif.id} style={styles.notifRow}>
+          <Image source={{ uri: notif.actorPhoto }} style={styles.avatar} />
+          <View style={styles.content}>
+            <Text style={styles.notifText}>
+              <Text style={styles.bold}>{notif.actorName}</Text> {notif.message}
+            </Text>
+            <Text style={styles.notifTime}>{notif.time}</Text>
+          </View>
+          {notif.type === 'follow' && (
+            <TouchableOpacity style={styles.followBtn}>
+              <Text style={styles.followText}>Follow</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.headerTitle}>Notifications</Text>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>New</Text>
-        <View style={styles.notifRow}>
-          <Image source={{ uri: 'https://picsum.photos/id/30/200' }} style={styles.avatarDummy} cachePolicy="disk" />
-          <Text style={styles.notifText}>Usamah Gozi liked your recent photo.</Text>
-          <Text style={styles.notifTime}>2m</Text>
-        </View>
-        <View style={styles.notifRow}>
-          <View style={styles.securityPhotoDummy} />
-          <View style={{flex: 1}}>
-            <Text style={styles.notifText}>Your security alert was updated.</Text>
-            <View style={{flexDirection: 'row', marginTop: 8}}>
-              <View style={styles.actionBtn}><Text style={styles.actionBtnText}>Review</Text></View>
-              <View style={[styles.actionBtn, {backgroundColor: 'transparent'}]}><Text style={styles.actionBtnText}>Dismiss</Text></View>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+      <FlatList
+        data={DUMMY_DATA}
+        keyExtractor={(item) => item.id}
+        renderItem={renderSection}
+        showsVerticalScrollIndicator={false}
+      />
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-    paddingHorizontal: 16
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginVertical: 16
-  },
-  sectionTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    marginTop: 10
-  },
-  notifRow: {
-    flexDirection: 'row',
-    marginBottom: 20
-  },
-  avatarDummy: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#333333'
-  },
-  securityPhotoDummy: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#000000'
-  },
-  notifText: {
-    color: '#ffffff',
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 14
-  },
-  notifTime: {
-    color: '#777777',
-    fontSize: 12
-  },
-  actionBtn: {
-    borderWidth: 1,
-    borderColor: '#333333',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 4,
-    marginRight: 8
-  },
-  actionBtnText: {
-    color: '#ffffff',
-    fontSize: 12
-  }
-})
+  container: { flex: 1, backgroundColor: '#000000' },
+  headerTitle: { color: '#ffffff', fontSize: 22, fontWeight: 'bold', margin: 16 },
+  sectionTitle: { color: '#ffffff', fontSize: 16, fontWeight: 'bold', marginVertical: 12, marginLeft: 16 },
+  notifRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 20 },
+  avatar: { width: 45, height: 45, borderRadius: 25, backgroundColor: '#333333' },
+  content: { flex: 1, marginLeft: 12 },
+  notifText: { color: '#ffffff', fontSize: 14, lineHeight: 20 },
+  bold: { fontWeight: 'bold' },
+  notifTime: { color: '#777777', fontSize: 12, marginTop: 4 },
+  followBtn: { backgroundColor: '#3b82f6', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 6 },
+  followText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' }
+});

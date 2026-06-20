@@ -1,206 +1,159 @@
-import React from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar } from 'react-native'
-import { Image } from 'expo-image'
-import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons'
-import PostCard from '../components/PostCard'
-
-const DUMMY_STORIES = [
-  { id: '1', user: 'Your Story', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', isMine: true },
-  { id: '2', user: 'cyber_vibe', avatar: 'https://images.unsplash.com/photo-1511367461989-f85a21fda167' },
-  { id: '3', user: 'flux_zero', avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12' },
-  { id: '4', user: 'neon_knight', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde' },
-  { id: '5', user: 'alyssa_art', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330' },
-]
-
-const DUMMY_POSTS = [
-  {
-    id: '1',
-    username: 'cyber_vibe',
-    userPhoto: 'https://images.unsplash.com/photo-1511367461989-f85a21fda167',
-    imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f',
-    caption: 'Exploring the intersection of liquid dynamics and neural aesthetics. This new "Vibe"...',
-    likes: 1200,
-    commentsCount: 43,
-    timeAgo: '2h ago',
-    location: '',
-    isLikedByUser: true
-  },
-  {
-    id: '2',
-    username: 'flux_zero',
-    userPhoto: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12',
-    imageUrl: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e',
-    caption: 'Late night workstation flow. The setup is finally complete. 💻',
-    likes: 854,
-    commentsCount: 12,
-    timeAgo: '5h ago',
-    location: '',
-    isLikedByUser: false
-  },
-  {
-    id: '3',
-    username: 'alyssa_art',
-    userPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
-    imageUrl: 'https://images.unsplash.com/photo-1555680202-c86f0e12f086',
-    caption: 'Midnight city reflections. 🌃💜',
-    likes: 3000,
-    commentsCount: 128,
-    timeAgo: '8h ago',
-    location: 'Tokyo, Japan',
-    isLikedByUser: true
-  }
-]
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar, Alert } from 'react-native';
+import { Image } from 'expo-image';
+import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
+import PostCard from '../components/PostCard';
+import { getActiveStories, createStory } from '../services/stories';
 
 export default function FeedScreen({ navigation }) {
-  const renderStory = ({ item }) => (
-    <TouchableOpacity
-      style={styles.storyContainer}
-      activeOpacity={0.8}
-      onPress={() => navigation.navigate('StoryScreen')}
-    >
-      <View style={[styles.storyRing, item.isMine && styles.myStoryRing]}>
-        <Image source={{ uri: item.avatar }} style={styles.storyAvatar} cachePolicy="disk" />
-        {item.isMine && (
-          <View style={styles.addStoryBadge}>
-            <Ionicons name="add" size={12} color="#ffffff" />
+  const [posts, setPosts] = useState([]);
+  const [stories, setStories] = useState([]);
+
+  useEffect(() => {
+    const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
+      setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    const loadStories = async () => {
+      try {
+        const activeStories = await getActiveStories();
+        setStories(activeStories);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadStories();
+    return () => unsubscribePosts();
+  }, []);
+
+  const launchPicker = async (type) => {
+    try {
+      let result;
+      const options = { allowsEditing: true, aspect: [9, 16], quality: 1 };
+      if (type === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert("Permission Denied", "Camera access is required.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync(options);
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert("Permission Denied", "Gallery access is required.");
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync(options);
+      }
+      if (!result.canceled && result.assets) {
+        await createStory({
+          userId: auth.currentUser.uid,
+          username: 'Your story',
+          userPhoto: auth.currentUser.photoURL,
+          mediaUrl: result.assets[0].uri,
+        });
+        const updated = await getActiveStories();
+        setStories(updated);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to process media.");
+    }
+  };
+
+  const handleStoryPress = (isMine, hasMyStory) => {
+    if (isMine && hasMyStory) {
+      navigation.navigate('StoryScreen', { userId: auth.currentUser.uid });
+    } else {
+      Alert.alert("Post Story", "Choose media source:", [
+        { text: "Camera", onPress: () => launchPicker('camera') },
+        { text: "Gallery", onPress: () => launchPicker('gallery') },
+        { text: "Cancel", style: "cancel" }
+      ]);
+    }
+  };
+
+  const renderStory = ({ item, index }) => {
+    const isMine = index === 0;
+    const hasMyStory = stories.some(s => s.userId === auth.currentUser.uid);
+    const displayAvatar = isMine ? (auth.currentUser?.photoURL) : item.userPhoto;
+
+    return (
+      <View style={styles.storyContainer}>
+        <TouchableOpacity 
+          activeOpacity={0.8} 
+          onPress={() => handleStoryPress(isMine, hasMyStory)}
+          onLongPress={() => handleStoryPress(true, false)}
+        >
+          <View style={[styles.storyRing, !isMine && stories.some(s => s.userId === item.userId) && styles.activeStoryRing, isMine && hasMyStory && styles.activeStoryRing]}>
+            <Image source={{ uri: displayAvatar }} style={styles.storyAvatar} cachePolicy="disk" />
           </View>
+        </TouchableOpacity>
+        
+        {isMine && (
+          <TouchableOpacity style={styles.addStoryBadge} onPress={() => handleStoryPress(true, false)}>
+            <Ionicons name="add" size={14} color="#ffffff" />
+          </TouchableOpacity>
         )}
-      </View>
-      <Text style={styles.storyUsername} numberOfLines={1}>{item.user}</Text>
-    </TouchableOpacity>
-  );
 
-  const FeedHeader = () => (
-    <View style={styles.headerSection}>
-      <View style={styles.mainHeader}>
-        <View style={styles.logoContainer}>
-          <MaterialIcons name="bubble-chart" size={24} color="#a855f7" />
-          <Text style={styles.logoText}>ANIMAVIBE</Text>
-        </View>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Ionicons name="notifications-outline" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Feather name="send" size={24} color="#ffffff" style={styles.headerSendIcon} />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.storyUsername} numberOfLines={1}>{isMine ? 'Your story' : item.username}</Text>
       </View>
-
-      <View style={styles.storiesWrapper}>
-        <FlatList
-          data={DUMMY_STORIES}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.id}
-          renderItem={renderStory}
-          contentContainerStyle={styles.storiesList}
-        />
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={DUMMY_POSTS}
+        data={posts}
         keyExtractor={item => item.id}
-        ListHeaderComponent={FeedHeader}
         renderItem={({ item }) => <PostCard post={item} />}
         showsVerticalScrollIndicator={false}
+        ListHeaderComponent={() => (
+          <View style={styles.headerSection}>
+            <View style={styles.mainHeader}>
+              <View style={styles.logoContainer}>
+                <MaterialIcons name="bubble-chart" size={24} color="#a855f7" />
+                <Text style={styles.logoText}>ANIMAVIBE</Text>
+              </View>
+              <View style={styles.headerIcons}>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Notifications')}>
+                  <Ionicons name="notifications-outline" size={24} color="#ffffff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('InboxScreen')}>
+                  <Feather name="send" size={24} color="#ffffff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <FlatList
+              data={[{ id: 'me' }, ...stories.filter(s => s.userId !== auth.currentUser.uid)]}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              renderItem={renderStory}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.storiesList}
+            />
+          </View>
+        )}
       />
     </SafeAreaView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0
-  },
-  headerSection: {
-    backgroundColor: '#000000',
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#111111',
-    marginBottom: 16
-  },
-  mainHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 1,
-    marginLeft: 4,
-  },
-  headerIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  iconBtn: {
-    marginLeft: 20,
-  },
-  headerSendIcon: {
-    transform: [{ rotate: '15deg' }, { translateY: -2 }]
-  },
-  storiesWrapper: {
-    marginTop: 8,
-  },
-  storiesList: {
-    paddingHorizontal: 16,
-  },
-  storyContainer: {
-    alignItems: 'center',
-    marginRight: 20,
-    width: 66,
-  },
-  storyRing: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    borderWidth: 2,
-    borderColor: '#a855f7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  myStoryRing: {
-    borderColor: '#333333',
-  },
-  storyAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#1a1a1a',
-  },
-  addStoryBadge: {
-    position: 'absolute',
-    bottom: -2,
-    right: -2,
-    backgroundColor: '#a855f7',
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#000000',
-  },
-  storyUsername: {
-    color: '#ffffff',
-    fontSize: 11,
-    marginTop: 8,
-    textAlign: 'center',
-  }
-})
+  container: { flex: 1, backgroundColor: '#000000', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
+  headerSection: { borderBottomWidth: 1, borderBottomColor: '#111111', marginBottom: 16 },
+  mainHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  logoContainer: { flexDirection: 'row', alignItems: 'center' },
+  logoText: { color: '#ffffff', fontSize: 14, fontWeight: '900', letterSpacing: 1, marginLeft: 4 },
+  headerIcons: { flexDirection: 'row', alignItems: 'center' },
+  iconBtn: { marginLeft: 20 },
+  storiesList: { paddingHorizontal: 16 },
+  storyContainer: { alignItems: 'center', marginRight: 20, width: 70, position: 'relative' },
+  storyRing: { width: 66, height: 66, borderRadius: 33, borderWidth: 2, borderColor: '#333333', justifyContent: 'center', alignItems: 'center' },
+  activeStoryRing: { borderColor: '#a855f7' },
+  storyAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1a1a1a' },
+  addStoryBadge: { position: 'absolute', bottom: 25, right: 5, backgroundColor: '#0095f6', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#000000', zIndex: 1 },
+  storyUsername: { color: '#ffffff', fontSize: 11, marginTop: 8, textAlign: 'center' }
+});
