@@ -40,7 +40,8 @@
           "webClientId": "864208355889-2972qm34bdfguk9ken2ijmfnvub3vf3o.apps.googleusercontent.com",
           "iosUrlScheme": "com.googleusercontent.apps.864208355889-463si70hu2tddrbg1el3gblim4ed0gp4"
         }
-      ]
+      ],
+      "expo-sharing"
     ]
   }
 }

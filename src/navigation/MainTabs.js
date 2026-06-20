@@ -6,12 +6,24 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedStack from './FeedStack'
 import ProfileStack from './ProfileStack'
 import DiscoveryScreen from '../screens/DiscoveryScreen'
+import SearchResultsScreen from '../screens/SearchResultsScreen'
+import TagResultsScreen from '../screens/TagResultsScreen'
 import NotificationsScreen from '../screens/NotificationsScreen'
 import CreatePostScreen from '../screens/CreatePostScreen'
 import TagPeopleScreen from '../screens/TagPeopleScreen'
 
 const Tab = createBottomTabNavigator()
 const Stack = createNativeStackNavigator()
+
+function DiscoveryStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="DiscoveryMain" component={DiscoveryScreen} />
+      <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
+      <Stack.Screen name="TagResults" component={TagResultsScreen} />
+    </Stack.Navigator>
+  )
+}
 
 function CreateStack() {
   return (
@@ -45,13 +57,12 @@ export default function MainTabs() {
           else if (route.name === 'Create') iconName = focused ? 'add-circle' : 'add-circle-outline'
           else if (route.name === 'Notifications') iconName = focused ? 'heart' : 'heart-outline'
           else if (route.name === 'ProfileTab') iconName = focused ? 'person' : 'person-outline'
-
           return <Ionicons name={iconName} size={size} color={color} />
         }
       })}
     >
       <Tab.Screen name="FeedTab" component={FeedStack} options={{ tabBarLabel: 'Home' }} />
-      <Tab.Screen name="Discovery" component={DiscoveryScreen} />
+      <Tab.Screen name="Discovery" component={DiscoveryStack} />
       <Tab.Screen name="Create" component={CreateStack} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="ProfileTab" component={ProfileStack} options={{ tabBarLabel: 'Profile' }} />

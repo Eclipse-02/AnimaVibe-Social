@@ -7,6 +7,7 @@ import {
   getDocs,
   increment,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -16,6 +17,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { createLikeNotification } from './notifications'
+import { CACHE_KEYS, getOfflineCache, setOfflineCache } from './offlineCache'
 
 function formatLikesCount(count = 0) {
   if (count >= 1000000) {
@@ -44,6 +46,81 @@ function mapPostDoc(postDoc) {
     userPhoto,
     likes: formatLikesCount(likesCount),
     likesCount,
+  }
+}
+
+function mapFeedDoc(postDoc) {
+  const data = postDoc.data()
+  const likesCount = data.likesCount || 0
+
+  return {
+    id: postDoc.id,
+    ...data,
+    image: data.imageUrl || data.image || '',
+    imageUrl: data.imageUrl || data.image || '',
+    avatar: data.userPhoto || data.avatar || '',
+    userPhoto: data.userPhoto || data.avatar || '',
+    likes: data.likes ?? likesCount,
+    likesCount,
+    timeAgo: 'Baru saja',
+  }
+}
+
+/**
+ * Subscribes to the feed and emits the last AsyncStorage copy before Firestore.
+ * This keeps the native feed usable when the app starts without a connection.
+ */
+export function subscribeToFeedPosts(onData, onError = console.error) {
+  let isActive = true
+  let unsubscribeFirestore = null
+
+  async function start() {
+    const cachedFeed = await getOfflineCache(CACHE_KEYS.feed)
+    const hasCachedFeed = Array.isArray(cachedFeed?.value)
+    if (!isActive) return
+
+    if (hasCachedFeed) {
+      onData(cachedFeed.value, {
+        fromCache: true,
+        savedAt: cachedFeed.savedAt,
+      })
+    }
+
+    const feedQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'))
+    unsubscribeFirestore = onSnapshot(
+      feedQuery,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        // The RN Firestore memory cache starts empty. Keep the durable
+        // AsyncStorage copy visible until a server snapshot arrives.
+        if (snapshot.metadata.fromCache && snapshot.empty && hasCachedFeed) {
+          return
+        }
+
+        const posts = snapshot.docs
+          .filter((postDoc) => postDoc.data().createdAt !== null)
+          .map(mapFeedDoc)
+
+        onData(posts, {
+          fromCache: snapshot.metadata.fromCache,
+          hasPendingWrites: snapshot.metadata.hasPendingWrites,
+        })
+
+        if (!snapshot.metadata.fromCache) {
+          setOfflineCache(CACHE_KEYS.feed, posts).catch((error) => {
+            console.warn('Failed to persist feed cache:', error)
+          })
+        }
+      },
+      onError
+    )
+  }
+
+  start().catch(onError)
+
+  return () => {
+    isActive = false
+    unsubscribeFirestore?.()
   }
 }
 

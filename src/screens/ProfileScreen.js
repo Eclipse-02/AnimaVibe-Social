@@ -39,28 +39,48 @@ function ProfileScreen() {
   const userProfile = useAuthStore((state) => state.userProfile);
   const setUserProfile = useAuthStore((state) => state.setUserProfile);
 
+  const targetUserId = route.params?.userId || user?.uid || userProfile?.uid;
+  const isOwnProfile = targetUserId === (user?.uid || userProfile?.uid);
+
+  const [displayedProfile, setDisplayedProfile] = useState(isOwnProfile ? userProfile : null);
   const [isEditing, setIsEditing] = useState(false);
-  const [username, setUsername] = useState(userProfile?.username || '');
-  const [displayName, setDisplayName] = useState(userProfile?.displayName || user?.displayName || '');
-  const [bio, setBio] = useState(userProfile?.bio || '');
-  const [avatarUri, setAvatarUri] = useState(userProfile?.photoURL || user?.photoURL || null);
+  const [username, setUsername] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [bio, setBio] = useState('');
+  const [avatarUri, setAvatarUri] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [userPosts, setUserPosts] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
 
   useEffect(() => {
-    const currentUid = user?.uid || userProfile?.uid;
-    if (!currentUid) return;
+    if (isOwnProfile) {
+      setDisplayedProfile(userProfile);
+    }
+  }, [userProfile, isOwnProfile]);
+
+  useEffect(() => {
+    if (!targetUserId) return;
+
+    let unsubscribeUser = () => {};
+
+    if (!isOwnProfile) {
+      const userDocRef = doc(db, 'users', targetUserId);
+      unsubscribeUser = onSnapshot(userDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setDisplayedProfile({ uid: docSnap.id, ...docSnap.data() });
+        }
+      });
+    }
 
     const postsRef = collection(db, 'posts');
     const q = query(
       postsRef, 
-      where('userId', '==', currentUid),
+      where('userId', '==', targetUserId),
       orderBy('createdAt', 'desc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribePosts = onSnapshot(q, (snapshot) => {
       const fetchedPosts = snapshot.docs.map(mapPostDoc);
       setUserPosts(fetchedPosts);
       setLoadingPosts(false);
@@ -69,15 +89,27 @@ function ProfileScreen() {
       setLoadingPosts(false);
     });
 
-    return () => unsubscribe();
-  }, [user?.uid, userProfile?.uid]);
+    return () => {
+      unsubscribeUser();
+      unsubscribePosts();
+    };
+  }, [targetUserId, isOwnProfile]);
 
   useEffect(() => {
-    if (route.params?.openEdit) {
+    if (displayedProfile) {
+      setUsername(displayedProfile.username || '');
+      setDisplayName(displayedProfile.displayName || user?.displayName || '');
+      setBio(displayedProfile.bio || '');
+      setAvatarUri(displayedProfile.photoURL || user?.photoURL || null);
+    }
+  }, [displayedProfile, isEditing]);
+
+  useEffect(() => {
+    if (route.params?.openEdit && isOwnProfile) {
       setIsEditing(true);
       navigation.setParams({ openEdit: undefined });
     }
-  }, [route.params?.openEdit]);
+  }, [route.params?.openEdit, isOwnProfile]);
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -160,25 +192,25 @@ function ProfileScreen() {
   };
 
   const getInitial = () => {
-    if (userProfile?.displayName || user?.displayName) return (userProfile?.displayName || user?.displayName).charAt(0).toUpperCase();
-    if (userProfile?.username) return userProfile.username.charAt(0).toUpperCase();
+    if (displayedProfile?.displayName || user?.displayName) return (displayedProfile?.displayName || user?.displayName).charAt(0).toUpperCase();
+    if (displayedProfile?.username) return displayedProfile.username.charAt(0).toUpperCase();
     return '?';
   };
 
   const ProfileHeaderComponent = () => (
     <View style={styles.profileHeader}>
       <View style={styles.avatarContainer}>
-        {(userProfile?.photoURL || user?.photoURL) ? (
-          <Image source={{ uri: userProfile?.photoURL || user?.photoURL }} style={styles.avatarImage} />
+        {(displayedProfile?.photoURL || (isOwnProfile && user?.photoURL)) ? (
+          <Image source={{ uri: displayedProfile?.photoURL || user?.photoURL }} style={styles.avatarImage} />
         ) : (
           <View style={styles.avatarPlaceholder}>
             <Text style={styles.avatarInitial}>{getInitial()}</Text>
           </View>
         )}
       </View>
-      <Text style={styles.name}>{userProfile?.displayName || user?.displayName || 'User'}</Text>
-      <Text style={styles.usernameDisplay}>@{userProfile?.username || 'username'}</Text>
-      <Text style={styles.bio}>{userProfile?.bio || 'Connect with your inner vibe'}</Text>
+      <Text style={styles.name}>{displayedProfile?.displayName || (isOwnProfile && user?.displayName) || 'User'}</Text>
+      <Text style={styles.usernameDisplay}>@{displayedProfile?.username || 'username'}</Text>
+      <Text style={styles.bio}>{displayedProfile?.bio || 'Connect with your inner vibe'}</Text>
 
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
@@ -186,11 +218,11 @@ function ProfileScreen() {
           <Text style={styles.statLabel}>Posts</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNum}>{userProfile?.followerCount || 0}</Text>
+          <Text style={styles.statNum}>{displayedProfile?.followerCount || 0}</Text>
           <Text style={styles.statLabel}>Followers</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statNum}>{userProfile?.followingCount || 0}</Text>
+          <Text style={styles.statNum}>{displayedProfile?.followingCount || 0}</Text>
           <Text style={styles.statLabel}>Following</Text>
         </View>
       </View>
@@ -202,15 +234,14 @@ function ProfileScreen() {
       activeOpacity={0.9} 
       style={styles.gridItem}
       onPress={() => {
-  const parent = navigation.getParent();
-
-  if (parent) {
-    parent.navigate('FeedTab', {
-      screen: 'PostDetail',
-      params: { post: item }
-    });
-  }
-}}
+        const parent = navigation.getParent();
+        if (parent) {
+          parent.navigate('FeedTab', {
+            screen: 'PostDetail',
+            params: { post: item }
+          });
+        }
+      }}
     >
       <Image source={{ uri: item.imageUrl }} style={styles.gridImage} cachePolicy="disk" />
     </TouchableOpacity>
@@ -218,9 +249,15 @@ function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {!isEditing && (
+      {!isEditing && isOwnProfile && (
         <TouchableOpacity style={styles.menuBtn} onPress={() => navigation.openDrawer()}>
           <Ionicons name="menu" size={28} color="#ffffff" />
+        </TouchableOpacity>
+      )}
+
+      {!isEditing && !isOwnProfile && (
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={28} color="#ffffff" />
         </TouchableOpacity>
       )}
 
@@ -292,10 +329,12 @@ function ProfileScreen() {
                 <TouchableOpacity 
                   style={[styles.actionBtn, styles.cancelBtn]} 
                   onPress={() => {
-                    setUsername(userProfile?.username || '');
-                    setDisplayName(userProfile?.displayName || user?.displayName || '');
-                    setBio(userProfile?.bio || '');
-                    setAvatarUri(userProfile?.photoURL || user?.photoURL || null);
+                    if (displayedProfile) {
+                      setUsername(displayedProfile.username || '');
+                      setDisplayName(displayedProfile.displayName || user?.displayName || '');
+                      setBio(displayedProfile.bio || '');
+                      setAvatarUri(displayedProfile.photoURL || user?.photoURL || null);
+                    }
                     setIsEditing(false);
                   }}
                   disabled={isSaving}
@@ -343,6 +382,7 @@ function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000000' },
   menuBtn: { alignSelf: 'flex-end', padding: 12 },
+  backBtn: { alignSelf: 'flex-start', padding: 12 },
   profileHeader: { alignItems: 'center', marginTop: 10, width: '100%', paddingHorizontal: 16 },
   avatarContainer: { marginBottom: 12 },
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#333', borderWidth: 2, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
