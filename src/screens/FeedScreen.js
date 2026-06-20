@@ -48,7 +48,7 @@ export default function FeedScreen({ navigation }) {
         }
         result = await ImagePicker.launchImageLibraryAsync(options);
       }
-      if (!result.canceled && result.assets) {
+      if (!result.canceled && result.assets && auth.currentUser) {
         await createStory({
           userId: auth.currentUser.uid,
           username: 'Your story',
@@ -64,6 +64,7 @@ export default function FeedScreen({ navigation }) {
   };
 
   const handleStoryPress = (isMine, hasMyStory) => {
+    if (!auth.currentUser) return;
     if (isMine && hasMyStory) {
       navigation.navigate('StoryScreen', { userId: auth.currentUser.uid });
     } else {
@@ -76,6 +77,7 @@ export default function FeedScreen({ navigation }) {
   };
 
   const renderStory = ({ item, index }) => {
+    if (!auth.currentUser) return null;
     const isMine = index === 0;
     const hasMyStory = stories.some(s => s.userId === auth.currentUser.uid);
     const displayAvatar = isMine ? (auth.currentUser?.photoURL) : item.userPhoto;
@@ -126,14 +128,16 @@ export default function FeedScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
             </View>
-            <FlatList
-              data={[{ id: 'me' }, ...stories.filter(s => s.userId !== auth.currentUser.uid)]}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              renderItem={renderStory}
-              keyExtractor={item => item.id}
-              contentContainerStyle={styles.storiesList}
-            />
+            {auth.currentUser && (
+              <FlatList
+                data={[{ id: 'me' }, ...stories.filter(s => s.userId !== auth.currentUser.uid)]}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                renderItem={renderStory}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.storiesList}
+              />
+            )}
           </View>
         )}
       />
