@@ -1,11 +1,13 @@
 import React from 'react'
 import { View, Text, StyleSheet, TextInput, ScrollView } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 
 export default function DiscoveryScreen() {
+  const insets = useSafeAreaInsets()
+
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.searchHeader}>
         <TextInput style={styles.searchInput} placeholder="Search creators, topics..." placeholderTextColor="#777" />
       </View>
@@ -42,7 +44,7 @@ export default function DiscoveryScreen() {
           <Image source={{ uri: 'https://picsum.photos/id/104/400/400' }} style={styles.gridBox} cachePolicy="disk" transition={200} />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 
@@ -53,7 +55,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16
   },
   searchHeader: {
-    marginTop: 10,
+    marginTop: 30,
     marginBottom: 16
   },
   searchInput: {

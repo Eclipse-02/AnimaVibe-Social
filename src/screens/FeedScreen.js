@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar, ActivityIndicator } from 'react-native';
-import { Image } from 'expo-image';
-import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons';
-import PostCard from '../components/PostCard';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import React from 'react'
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar } from 'react-native'
+import { Image } from 'expo-image'
+import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons'
+import PostCard from '../components/PostCard'
 
 const DUMMY_STORIES = [
   { id: '1', user: 'Your Story', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', isMine: true },
@@ -12,36 +10,51 @@ const DUMMY_STORIES = [
   { id: '3', user: 'flux_zero', avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12' },
   { id: '4', user: 'neon_knight', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde' },
   { id: '5', user: 'alyssa_art', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330' },
-];
+]
+
+const DUMMY_POSTS = [
+  {
+    id: '1',
+    username: 'cyber_vibe',
+    userPhoto: 'https://images.unsplash.com/photo-1511367461989-f85a21fda167',
+    imageUrl: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f',
+    caption: 'Exploring the intersection of liquid dynamics and neural aesthetics. This new "Vibe"...',
+    likes: 1200,
+    commentsCount: 43,
+    timeAgo: '2h ago',
+    location: '',
+    isLikedByUser: true
+  },
+  {
+    id: '2',
+    username: 'flux_zero',
+    userPhoto: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12',
+    imageUrl: 'https://images.unsplash.com/photo-1547394765-185e1e68f34e',
+    caption: 'Late night workstation flow. The setup is finally complete. 💻',
+    likes: 854,
+    commentsCount: 12,
+    timeAgo: '5h ago',
+    location: '',
+    isLikedByUser: false
+  },
+  {
+    id: '3',
+    username: 'alyssa_art',
+    userPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330',
+    imageUrl: 'https://images.unsplash.com/photo-1555680202-c86f0e12f086',
+    caption: 'Midnight city reflections. 🌃💜',
+    likes: 3000,
+    commentsCount: 128,
+    timeAgo: '8h ago',
+    location: 'Tokyo, Japan',
+    isLikedByUser: true
+  }
+]
 
 export default function FeedScreen({ navigation }) {
-  const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const postsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setPosts(postsData);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#a855f7" />
-      </View>
-    );
-  }
-
   const renderStory = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.storyContainer} 
+    <TouchableOpacity
+      style={styles.storyContainer}
       activeOpacity={0.8}
       onPress={() => navigation.navigate('StoryScreen')}
     >
@@ -73,7 +86,7 @@ export default function FeedScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-      
+
       <View style={styles.storiesWrapper}>
         <FlatList
           data={DUMMY_STORIES}
@@ -90,31 +103,104 @@ export default function FeedScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
-        data={posts}
+        data={DUMMY_POSTS}
         keyExtractor={item => item.id}
         ListHeaderComponent={FeedHeader}
         renderItem={({ item }) => <PostCard post={item} />}
         showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
-  );
+  )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-  headerSection: { backgroundColor: '#000000', paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#111111', marginBottom: 16 },
-  mainHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  logoContainer: { flexDirection: 'row', alignItems: 'center' },
-  logoText: { color: '#ffffff', fontSize: 14, fontWeight: '900', letterSpacing: 1, marginLeft: 4 },
-  headerIcons: { flexDirection: 'row', alignItems: 'center' },
-  iconBtn: { marginLeft: 20 },
-  headerSendIcon: { transform: [{ rotate: '15deg' }, { translateY: -2 }] },
-  storiesWrapper: { marginTop: 8 },
-  storiesList: { paddingHorizontal: 16 },
-  storyContainer: { alignItems: 'center', marginRight: 20, width: 66 },
-  storyRing: { width: 66, height: 66, borderRadius: 33, borderWidth: 2, borderColor: '#a855f7', justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  myStoryRing: { borderColor: '#333333' },
-  storyAvatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#1a1a1a' },
-  addStoryBadge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#a855f7', width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#000000' },
-  storyUsername: { color: '#ffffff', fontSize: 11, marginTop: 8, textAlign: 'center' }
-});
+  container: {
+    flex: 1,
+    backgroundColor: '#000000',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0
+  },
+  headerSection: {
+    backgroundColor: '#000000',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#111111',
+    marginBottom: 16
+  },
+  mainHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 1,
+    marginLeft: 4,
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconBtn: {
+    marginLeft: 20,
+  },
+  headerSendIcon: {
+    transform: [{ rotate: '15deg' }, { translateY: -2 }]
+  },
+  storiesWrapper: {
+    marginTop: 8,
+  },
+  storiesList: {
+    paddingHorizontal: 16,
+  },
+  storyContainer: {
+    alignItems: 'center',
+    marginRight: 20,
+    width: 66,
+  },
+  storyRing: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    borderWidth: 2,
+    borderColor: '#a855f7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  myStoryRing: {
+    borderColor: '#333333',
+  },
+  storyAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#1a1a1a',
+  },
+  addStoryBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#a855f7',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#000000',
+  },
+  storyUsername: {
+    color: '#ffffff',
+    fontSize: 11,
+    marginTop: 8,
+    textAlign: 'center',
+  }
+})
