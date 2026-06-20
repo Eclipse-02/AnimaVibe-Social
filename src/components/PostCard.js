@@ -83,10 +83,16 @@ export default function PostCard({ post }) {
                 {likeCount > 999 ? (likeCount/1000).toFixed(1) + 'k' : likeCount}
               </Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Comments', { postId: post.id })}>
-            <Ionicons name="chatbubble-outline" size={26} color="#ffffff" />
-            <Text style={styles.actionText}>{post.commentsCount || 0}</Text>
+        <TouchableOpacity 
+  style={styles.actionBtn} 
+  onPress={() => {
+    console.log("Navigating to Comments with postId:", post.id);
+    navigation.navigate('Comments', { postId: post.id });
+  }}
+>
+  <Ionicons name="chatbubble-outline" size={26} color="#ffffff" />
+  <Text style={styles.actionText}>{post.commentsCount || 0}</Text>
+</TouchableOpacity>
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={onShare}>
             <Ionicons name="share-social-outline" size={26} color="#ffffff" />
