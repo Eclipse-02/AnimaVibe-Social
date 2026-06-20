@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import RootStack from './src/navigation/RootStack'
 import { startNetworkListener } from './src/services/network'
+import 'react-native-gesture-handler';
 
 export default function App() {
   useEffect(() => startNetworkListener(), [])

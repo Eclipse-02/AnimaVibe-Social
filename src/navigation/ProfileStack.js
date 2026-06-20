@@ -1,13 +1,17 @@
 import React from 'react'
-import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { createDrawerNavigator } from '@react-navigation/drawer'
 import ProfileScreen from '../screens/ProfileScreen'
+import ProfileDrawerContent from '../components/ProfileDrawerContent'
 
-const Stack = createNativeStackNavigator()
+const Drawer = createDrawerNavigator()
 
 export default function ProfileStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Profile" component={ProfileScreen} />
-    </Stack.Navigator>
+    <Drawer.Navigator
+      screenOptions={{ headerShown: false, drawerPosition: 'right' }}
+      drawerContent={(props) => <ProfileDrawerContent {...props} />}
+    >
+      <Drawer.Screen name="Profile" component={ProfileScreen} />
+    </Drawer.Navigator>
   )
 }

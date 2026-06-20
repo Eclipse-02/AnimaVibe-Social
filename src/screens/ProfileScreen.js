@@ -2,14 +2,14 @@ import React, { memo, useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ActivityIndicator, TextInput, Alert, Keyboard, FlatList, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, storage, auth } from '../config/firebase';
 import { doc, setDoc, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { updateProfile } from 'firebase/auth';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = width / 3;
@@ -34,10 +34,9 @@ function mapPostDoc(postDoc) {
 function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const { logout } = useAuth();
+  const route = useRoute();
   const user = useAuthStore((state) => state.user);
   const userProfile = useAuthStore((state) => state.userProfile);
-  const isLoading = useAuthStore((state) => state.isLoading);
   const setUserProfile = useAuthStore((state) => state.setUserProfile);
 
   const [isEditing, setIsEditing] = useState(false);
@@ -73,13 +72,12 @@ function ProfileScreen() {
     return () => unsubscribe();
   }, [user?.uid, userProfile?.uid]);
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (err) {
-      console.error('Logout failed:', err);
+  useEffect(() => {
+    if (route.params?.openEdit) {
+      setIsEditing(true);
+      navigation.setParams({ openEdit: undefined });
     }
-  };
+  }, [route.params?.openEdit]);
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -182,18 +180,6 @@ function ProfileScreen() {
       <Text style={styles.usernameDisplay}>@{userProfile?.username || 'username'}</Text>
       <Text style={styles.bio}>{userProfile?.bio || 'Connect with your inner vibe'}</Text>
 
-      <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(true)}>
-        <Text style={styles.editBtnText}>Edit Profile</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} disabled={isLoading}>
-        {isLoading ? (
-          <ActivityIndicator size="small" color="#ff4444" />
-        ) : (
-          <Text style={styles.logoutBtnText}>Log Out</Text>
-        )}
-      </TouchableOpacity>
-
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
           <Text style={styles.statNum}>{userPosts.length}</Text>
@@ -232,8 +218,15 @@ function ProfileScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {!isEditing && (
+        <TouchableOpacity style={styles.menuBtn} onPress={() => navigation.openDrawer()}>
+          <Ionicons name="menu" size={28} color="#ffffff" />
+        </TouchableOpacity>
+      )}
+
       {isEditing ? (
         <FlatList
+          key="profile-edit-form"
           data={[]}
           renderItem={null}
           ListHeaderComponent={
@@ -327,6 +320,7 @@ function ProfileScreen() {
         />
       ) : (
         <FlatList
+          key="profile-grid-3col"
           data={userPosts}
           keyExtractor={(item) => item.id}
           numColumns={3}
@@ -348,6 +342,7 @@ function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000000' },
+  menuBtn: { alignSelf: 'flex-end', padding: 12 },
   profileHeader: { alignItems: 'center', marginTop: 10, width: '100%', paddingHorizontal: 16 },
   avatarContainer: { marginBottom: 12 },
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#333', borderWidth: 2, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
@@ -356,10 +351,6 @@ const styles = StyleSheet.create({
   name: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   usernameDisplay: { color: '#888888', fontSize: 14, marginTop: 2 },
   bio: { color: '#aaa', fontSize: 14, marginTop: 6, textAlign: 'center', paddingHorizontal: 20 },
-  editBtn: { backgroundColor: '#111', borderWidth: 1, borderColor: '#222', width: '80%', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 16 },
-  editBtnText: { color: '#fff', fontWeight: '600' },
-  logoutBtn: { backgroundColor: '#1a0d0d', borderWidth: 1, borderColor: '#5c1d1d', width: '80%', padding: 10, borderRadius: 8, alignItems: 'center', marginTop: 12, height: 40, justifyContent: 'center' },
-  logoutBtnText: { color: '#ff4444', fontWeight: '600' },
   statsContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 30, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#111', paddingVertical: 12, width: '100%', marginBottom: 8 },
   statBox: { alignItems: 'center' },
   statNum: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
