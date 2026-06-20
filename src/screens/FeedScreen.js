@@ -4,8 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons, Feather, MaterialIcons } from '@expo/vector-icons'
 import PostCard from '../components/PostCard'
-import { db } from '../config/firebase'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import { subscribeToFeedPosts } from '../services/posts'
 
 const DUMMY_STORIES = [
   { id: '1', user: 'Your Story', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', isMine: true },
@@ -21,17 +20,7 @@ export default function FeedScreen({ navigation }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const postsRef = collection(db, 'posts')
-    const q = query(postsRef, orderBy('createdAt', 'desc'))
-
-    const unsubscribe = onSnapshot(q, { includeMetadataChanges: false }, (snapshot) => {
-      const fetchedPosts = snapshot.docs
-        .filter(doc => doc.data().createdAt !== null)
-        .map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          timeAgo: 'Baru saja',
-        }))
+    const unsubscribe = subscribeToFeedPosts((fetchedPosts) => {
       setPosts(fetchedPosts)
       setLoading(false)
     }, (error) => {

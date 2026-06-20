@@ -5,7 +5,13 @@ import {
   getAuth,
 } from "firebase/auth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getFirestore } from "firebase/firestore";
+import { Platform } from "react-native";
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -28,7 +34,21 @@ try {
   auth = getAuth(app);
 }
 
-const db = getFirestore(app);
+let db;
+try {
+  // IndexedDB persistence is available on web. React Native uses the
+  // AsyncStorage feed cache in services/offlineCache.js instead.
+  db = Platform.OS === "web"
+    ? initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentSingleTabManager(),
+        }),
+      })
+    : initializeFirestore(app);
+} catch (error) {
+  // Fast Refresh can evaluate this module after Firestore was initialized.
+  db = getFirestore(app);
+}
 const storage = getStorage(app);
 
 export { app, auth, db, storage };
