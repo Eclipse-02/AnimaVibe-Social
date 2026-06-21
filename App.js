@@ -5,7 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import RootStack from './src/navigation/RootStack';
 import OfflineBanner from './src/components/OfflineBanner';
-import { startNetworkListener } from './src/services/network';
+import { startNetworkListener } from './src/lib/firestore/network';
 
 export default function App() {
   useEffect(() => startNetworkListener(), []);

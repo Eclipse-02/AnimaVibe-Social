@@ -1,25 +1,24 @@
 import React from 'react'
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { Ionicons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import FeedStack from './FeedStack'
 import ProfileStack from './ProfileStack'
-import DiscoveryScreen from '../screens/DiscoveryScreen'
-import SearchResultsScreen from '../screens/SearchResultsScreen'
-import TagResultsScreen from '../screens/TagResultsScreen'
-import NotificationsScreen from '../screens/NotificationsScreen'
-import CreatePostScreen from '../screens/CreatePostScreen'
-import TagPeopleScreen from '../screens/TagPeopleScreen'
+import DiscoveryScreen from '../screens/search/DiscoveryScreen'
+import TagResultsScreen from '../screens/feed/TagResultsScreen'
+import NotificationsScreen from '../screens/notifications/NotificationsScreen'
+import CreatePostScreen from '../screens/feed/CreatePostScreen'
+import TagPeopleScreen from '../screens/feed/TagPeopleScreen'
+import { useThemeColors } from '../hooks/useTheme'
 
-const Tab = createBottomTabNavigator()
+const Tab = createMaterialTopTabNavigator()
 const Stack = createNativeStackNavigator()
 
 function DiscoveryStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="DiscoveryMain" component={DiscoveryScreen} />
-      <Stack.Screen name="SearchResults" component={SearchResultsScreen} />
       <Stack.Screen name="TagResults" component={TagResultsScreen} />
     </Stack.Navigator>
   )
@@ -36,28 +35,32 @@ function CreateStack() {
 
 export default function MainTabs() {
   const insets = useSafeAreaInsets()
+  const colors = useThemeColors()
 
   return (
     <Tab.Navigator
+      tabBarPosition="bottom"
       screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#555555',
+        tabBarActiveTintColor: colors.text,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: '#000000',
-          borderTopColor: '#222222',
+          backgroundColor: colors.background,
+          borderTopColor: colors.border,
           height: 70 + (insets.bottom > 0 ? insets.bottom : 10),
           paddingBottom: insets.bottom > 0 ? insets.bottom + 6 : 14,
-          paddingTop: 8,
         },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIndicatorStyle: {
+          backgroundColor: 'transparent',
+        },
+        tabBarShowLabel: false,
+        tabBarIcon: ({ focused, color }) => {
           let iconName
           if (route.name === 'FeedTab') iconName = focused ? 'home' : 'home-outline'
           else if (route.name === 'Discovery') iconName = focused ? 'search' : 'search-outline'
           else if (route.name === 'Create') iconName = focused ? 'add-circle' : 'add-circle-outline'
-          else if (route.name === 'Notifications') iconName = focused ? 'heart' : 'heart-outline'
+          else if (route.name === 'Notifications') iconName = focused ? 'notifications' : 'notifications-outline'
           else if (route.name === 'ProfileTab') iconName = focused ? 'person' : 'person-outline'
-          return <Ionicons name={iconName} size={size} color={color} />
+          return <Ionicons name={iconName} size={24} color={color} />
         }
       })}
     >

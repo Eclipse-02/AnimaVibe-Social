@@ -1,10 +1,8 @@
 import React from 'react'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
-import FeedScreen from '../screens/FeedScreen'
-import PostDetailScreen from '../screens/PostDetailScreen'
-import InboxScreen from '../screens/InboxScreen'
-import ChatScreen from '../screens/ChatScreen'
-import NotificationsScreen from '../screens/NotificationsScreen'
+import FeedScreen from '../screens/feed/FeedScreen'
+import PostDetailScreen from '../screens/feed/PostDetailScreen'
+import NotificationsScreen from '../screens/notifications/NotificationsScreen'
 
 const Stack = createNativeStackNavigator()
 
@@ -18,14 +16,10 @@ export default function FeedStack() {
       <Stack.Screen
         name="PostDetail"
         component={PostDetailScreen}
-      />
-      <Stack.Screen
-        name="InboxScreen"
-        component={InboxScreen}
-      />
-      <Stack.Screen
-        name="ChatScreen"
-        component={ChatScreen}
+        options={{
+          animation: 'fade_from_bottom',
+          animationDuration: 320,
+        }}
       />
       <Stack.Screen
         name="Notifications"

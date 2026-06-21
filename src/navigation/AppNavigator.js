@@ -1,11 +1,13 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text } from 'react-native';
+import { useThemeColors } from '../hooks/useTheme';
 
 function HomeScreen() {
+  const colors = useThemeColors();
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
-      <Text style={{ color: '#fff' }}>AnimaVibe Social Feed (Menu Utama)</Text>
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+      <Text style={{ color: colors.text }}>AnimaVibe Social Feed (Main Menu)</Text>
     </View>
   );
 }

@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '../config/firebase'
-import { useAuthStore } from '../store/useAuthStore'
-import { getUserProfile } from '../services/users'
+import { useAuthStore } from '../store/authStore'
+import { getUserProfile } from '../lib/firestore/users'
 
 export function useInitializeAuth() {
   const setUser = useAuthStore((state) => state.setUser)
@@ -13,7 +13,7 @@ export function useInitializeAuth() {
       if (firebaseUser) {
         const serializableUser = {
           uid: firebaseUser.uid,
-          email: firebaseUser.email || '', // Google users might have null email if privacy settings
+          email: firebaseUser.email || '',
           displayName: firebaseUser.displayName || firebaseUser.providerData[0]?.displayName || '',
           photoURL: firebaseUser.photoURL || firebaseUser.providerData[0]?.photoURL || '',
         };

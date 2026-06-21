@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
-import { useAuthStore } from '../store/useAuthStore';
-import { getUserProfile } from '../services/users';
+import { useAuthStore } from '../store/authStore';
+import { getUserProfile } from '../lib/firestore/users';
 
 GoogleSignin.configure({
     webClientId: '864208355889-2972qm34bdfguk9ken2ijmfnvub3vf3o.apps.googleusercontent.com',
@@ -22,7 +22,6 @@ export function useGoogleAuth() {
             await GoogleSignin.hasPlayServices();
             const signInResult = await GoogleSignin.signIn();
 
-            // Get the ID token
             const idToken = signInResult.data?.idToken;
             if (!idToken) {
                 throw new Error('No ID token found!');
