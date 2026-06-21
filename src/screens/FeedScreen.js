@@ -84,6 +84,7 @@ export default function FeedScreen({ navigation }) {
   };
 
   const handleStoryPress = (isMine, hasMyStory) => {
+    if (!auth.currentUser) return;
     if (isMine && hasMyStory) {
       navigation.navigate('StoryScreen', {
         userId: auth.currentUser?.uid
@@ -107,6 +108,7 @@ export default function FeedScreen({ navigation }) {
   };
 
   const renderStory = ({ item, index }) => {
+    if (!auth.currentUser) return null;
     const isMine = index === 0;
 
     const hasMyStory = stories.some(
