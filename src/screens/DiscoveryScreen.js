@@ -20,6 +20,7 @@ import auth from '@react-native-firebase/auth';
 
 const { width } = Dimensions.get('window');
 const columnWidth = (width - 40) / 2;
+const tripleColumnWidth = (width - 48) / 3; 
 
 const MOCK_DATA = [
   { id: '1', type: 'wide', uri: 'https://picsum.photos/400/300' },
@@ -32,6 +33,7 @@ export default function DiscoveryScreen() {
 
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('akun');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const currentUserId = auth().currentUser?.uid;
@@ -43,66 +45,165 @@ export default function DiscoveryScreen() {
     }
 
     setLoading(true);
+    let unsubscribe = () => {};
 
-    const unsubscribe = firestore()
-      .collection('users')
-      .where('username', '>=', searchQuery.toLowerCase())
-      .where('username', '<=', searchQuery.toLowerCase() + '\uf8ff')
-      .limit(20)
-      .onSnapshot(
-        snapshot => {
-          const users = [];
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            if (doc.id !== currentUserId) {
-              users.push({ id: doc.id, ...data });
-            }
-          });
-          setSearchResults(users);
-          setLoading(false);
-        },
-        error => {
-          console.error(error);
-          setLoading(false);
-        }
-      );
+    const cleanQuery = searchQuery.trim().toLowerCase();
+
+    if (activeTab === 'akun') {
+      const displayQuery = cleanQuery.startsWith('@') ? cleanQuery.slice(1) : cleanQuery;
+      unsubscribe = firestore()
+        .collection('users')
+        .where('username', '>=', displayQuery)
+        .where('username', '<=', displayQuery + '\uf8ff')
+        .limit(20)
+        .onSnapshot(
+          snapshot => {
+            const users = [];
+            snapshot.forEach(doc => {
+              const data = doc.data();
+              if (doc.id !== currentUserId) {
+                users.push({ id: doc.id, type: 'user', ...data });
+              }
+            });
+            setSearchResults(users);
+            setLoading(false);
+          },
+          error => {
+            console.error(error);
+            setLoading(false);
+          }
+        );
+    } 
+
+    else if (activeTab === 'hashtag') {
+      const tagQuery = cleanQuery.startsWith('#') ? cleanQuery.slice(1) : cleanQuery;
+      unsubscribe = firestore()
+        .collection('posts')
+        .where('tags', 'array-contains', tagQuery)
+        .limit(20)
+        .onSnapshot(
+          snapshot => {
+            const tagsMap = new Map();
+            snapshot.forEach(doc => {
+              const data = doc.data();
+              if (data.tags && Array.isArray(data.tags)) {
+                data.tags.forEach(t => {
+                  if (t.toLowerCase().includes(tagQuery)) {
+                    if (!tagsMap.has(t)) {
+                      tagsMap.set(t, { id: t, type: 'tag', tagName: '#' + t, count: 1 });
+                    } else {
+                      tagsMap.get(t).count += 1;
+                    }
+                  }
+                });
+              }
+            });
+            setSearchResults(Array.from(tagsMap.values()));
+            setLoading(false);
+          },
+          error => {
+            console.error(error);
+            setLoading(false);
+          }
+        );
+    } 
+
+    else if (activeTab === 'post') {
+      unsubscribe = firestore()
+        .collection('posts')
+        .orderBy('createdAt', 'desc')
+        .limit(200)
+        .onSnapshot(
+          snapshot => {
+            const posts = [];
+            snapshot.forEach(doc => {
+              const data = doc.data();
+              const caption = (data.caption || '').toLowerCase();
+              if (caption.includes(cleanQuery)) {
+                posts.push({ id: doc.id, type: 'post', ...data });
+              }
+            });
+            setSearchResults(posts);
+            setLoading(false);
+          },
+          error => {
+            console.error(error);
+            setLoading(false);
+          }
+        );
+    }
 
     return () => unsubscribe();
-  }, [searchQuery]);
+  }, [searchQuery, activeTab]);
 
   const handleCancelSearch = () => {
     setIsSearching(false);
     setSearchQuery('');
     setSearchResults([]);
+    setActiveTab('akun');
   };
 
-  const renderUserItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.userCard}
-      onPress={() =>
-        navigation.navigate('ProfileTab', {
-          screen: 'Profile',
-          params: { userId: item.id }
-        })
-      }
-    >
-      <Image
-        source={
-          item.photoURL
-            ? { uri: item.photoURL }
-            : { uri: 'https://cdn-icons-png.flaticon.com/512/149/149071.png' }
-        }
-        style={styles.searchAvatar}
-        contentFit="cover"
-      />
-      <View style={styles.userInfo}>
-        <Text style={styles.displayName}>
-          {item.displayName || 'User AnimaVibe'}
-        </Text>
-        <Text style={styles.username}>@{item.username}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderSearchItem = ({ item }) => {
+    if (activeTab === 'akun') {
+      return (
+        <TouchableOpacity
+          style={styles.userCard}
+          onPress={() =>
+            navigation.navigate('ProfileTab', {
+              screen: 'Profile',
+              params: { userId: item.id }
+            })
+          }
+        >
+          <Image
+            source={
+              item.photoURL
+                ? { uri: item.photoURL }
+                : { uri: 'https://cdn-icons-png.flaticon.com/512/149/149071.png' }
+            }
+            style={styles.searchAvatar}
+            contentFit="cover"
+          />
+          <View style={styles.userInfo}>
+            <Text style={styles.displayName}>
+              {item.displayName || 'User AnimaVibe'}
+            </Text>
+            <Text style={styles.username}>@{item.username}</Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    if (activeTab === 'hashtag') {
+      return (
+        <TouchableOpacity
+          style={styles.userCard}
+          onPress={() => navigation.navigate('TagResults', { tag: item.tagName })}
+        >
+          <View style={styles.hashtagIconCircle}>
+            <Ionicons name="pricetag-outline" size={20} color="#fff" />
+          </View>
+          <View style={styles.userInfo}>
+            <Text style={styles.displayName}>{item.tagName}</Text>
+            <Text style={styles.username}>{item.count} postingan terkait</Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    if (activeTab === 'post') {
+      return (
+        <TouchableOpacity
+          style={styles.postGridItem}
+          onPress={() => navigation.navigate('FeedTab', { screen: 'PostDetail', params: { post: item } })}
+        >
+          <Image source={{ uri: item.mediaURL || item.image }} style={styles.postGridImage} contentFit="cover" />
+        </TouchableOpacity>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -114,7 +215,7 @@ export default function DiscoveryScreen() {
           {isSearching ? (
             <TextInput
               style={styles.searchInputField}
-              placeholder="Cari pengguna berdasarkan username..."
+              placeholder={`Cari berdasarkan ${activeTab}...`}
               placeholderTextColor="#666"
               value={searchQuery}
               onChangeText={(text) => setSearchQuery(text)}
@@ -137,6 +238,23 @@ export default function DiscoveryScreen() {
 
       {isSearching ? (
         <View style={{ flex: 1 }}>
+          <View style={styles.tabBarContainer}>
+            {['akun', 'hashtag', 'post'].map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
+                onPress={() => {
+                  setActiveTab(tab);
+                  setSearchResults([]);
+                }}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                  {tab === 'akun' ? 'Akun' : tab === 'hashtag' ? 'Hashtag' : 'Postingan'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           {loading && (
             <ActivityIndicator
               size="small"
@@ -146,25 +264,27 @@ export default function DiscoveryScreen() {
           )}
 
           <FlatList
-            key="search-list"
+            key={activeTab === 'post' ? 'post-grid' : 'normal-list'}
             data={searchResults}
-            renderItem={renderUserItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={{ paddingHorizontal: 16 }}
+            renderItem={renderSearchItem}
+            keyExtractor={(item, index) => item.id || index.toString()}
+            numColumns={activeTab === 'post' ? 3 : 1}
+            columnWrapperStyle={activeTab === 'post' ? styles.postColumnWrapper : null}
+            contentContainerStyle={{ paddingHorizontal: activeTab === 'post' ? 0 : 16, paddingTop: 8 }}
             ListEmptyComponent={
               !loading && searchQuery.length > 0 ? (
-                <Text style={styles.emptyText}>Pengguna tidak ditemukan.</Text>
+                <Text style={styles.emptyText}>Hasil tidak ditemukan.</Text>
               ) : (
-                <Text style={styles.emptyText}>Ketik username terdaftar...</Text>
+                <Text style={styles.emptyText}>Ketik kata kunci pencarian...</Text>
               )
             }
           />
         </View>
       ) : (
-        <View style={{ flex: 1 }}>
+
+<View style={{ flex: 1 }}>
           <View style={styles.trendingContainer}>
             <Text style={styles.trendingTitle}>TRENDING</Text>
-
             <View style={styles.tagRow}>
               {['#photography', '#design', '#travel', '#architecture'].map((tag) => (
                 <TouchableOpacity
@@ -246,6 +366,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500'
   },
+  /* STYLING TAB BAR BARU */
+  tabBarContainer: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#161616',
+    marginTop: 10
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent'
+  },
+  activeTabItem: {
+    borderBottomColor: '#fff'
+  },
+  tabText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500'
+  },
+  activeTabText: {
+    color: '#fff',
+    fontWeight: 'bold'
+  },
   trendingContainer: {
     paddingHorizontal: 16,
     marginTop: 16,
@@ -297,8 +443,19 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     backgroundColor: '#222'
   },
+  hashtagIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#161616',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#333'
+  },
   userInfo: {
-    marginLeft: 12
+    marginLeft: 12,
+    flex: 1
   },
   displayName: {
     color: '#fff',
@@ -315,5 +472,17 @@ const styles = StyleSheet.create({
     color: '#444',
     marginTop: 40,
     fontSize: 14
+  },
+
+  postColumnWrapper: {
+    justifyContent: 'flex-start'
+  },
+  postGridItem: {
+    width: tripleColumnWidth,
+    height: tripleColumnWidth,
+    margin: 1
+  },
+  postGridImage: {
+    flex: 1
   }
 });
