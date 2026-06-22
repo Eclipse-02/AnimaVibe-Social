@@ -16,9 +16,50 @@ import {
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore'
-import { db } from '../../config/firebase'
-import { addComment } from './comments'
+import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { db, storage } from '../../config/firebase'
 import { createStoryNotification, createLikeNotification } from './notifications'
+
+const STORY_LIFETIME_MS = 24 * 60 * 60 * 1000
+
+function getMediaMetadata(mediaUrl, requestedType) {
+  const extensionMatch = String(mediaUrl).split('?')[0].match(/\.([a-zA-Z0-9]+)$/)
+  const rawExtension = extensionMatch?.[1]?.toLowerCase()
+  const isVideo = requestedType === 'video' || ['mp4', 'mov', 'm4v', 'webm'].includes(rawExtension)
+
+  return {
+    mediaType: isVideo ? 'video' : 'image',
+    extension: rawExtension || (isVideo ? 'mp4' : 'jpg'),
+    contentType: isVideo ? `video/${rawExtension === 'mov' ? 'quicktime' : rawExtension || 'mp4'}` : `image/${rawExtension === 'jpg' ? 'jpeg' : rawExtension || 'jpeg'}`,
+  }
+}
+
+async function uploadStoryMedia(userId, mediaUrl, requestedType) {
+  if (/^https?:\/\//i.test(mediaUrl)) {
+    return {
+      mediaUrl,
+      mediaPath: null,
+      mediaType: requestedType || 'image',
+      storageRef: null,
+    }
+  }
+
+  const metadata = getMediaMetadata(mediaUrl, requestedType)
+  const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const mediaPath = `stories/${userId}/${uniqueId}.${metadata.extension}`
+  const storageRef = ref(storage, mediaPath)
+  const response = await fetch(mediaUrl)
+  const blob = await response.blob()
+
+  await uploadBytes(storageRef, blob, { contentType: metadata.contentType })
+
+  return {
+    mediaUrl: await getDownloadURL(storageRef),
+    mediaPath,
+    mediaType: metadata.mediaType,
+    storageRef,
+  }
+}
 
 function mapStoryDoc(storyDoc) {
   return {
@@ -33,6 +74,8 @@ function mapStoryDoc(storyDoc) {
  * @returns {Promise<Object>} Created story with generated id.
  */
 export async function createStory(story = {}) {
+  let uploadedStorageRef = null
+
   try {
     if (!story.userId) {
       throw new Error('User id is required to create a story.')
@@ -42,31 +85,31 @@ export async function createStory(story = {}) {
       throw new Error('Story media url is required.')
     }
 
-    const expiresAt =
-      story.expiresAt ||
-      Timestamp.fromDate(new Date(Date.now() + 24 * 60 * 60 * 1000))
+    const uploadedMedia = await uploadStoryMedia(
+      story.userId,
+      story.mediaUrl,
+      story.mediaType
+    )
+    uploadedStorageRef = uploadedMedia.storageRef
+
+    const expiresAt = Timestamp.fromMillis(Date.now() + STORY_LIFETIME_MS)
     const storyData = {
       userId: story.userId,
       username: story.username || 'Anonymous',
       userPhoto: story.userPhoto || story.avatar || '',
-      mediaUrl: story.mediaUrl,
-      mediaType: story.mediaType || 'image',
+      mediaUrl: uploadedMedia.mediaUrl,
+      mediaPath: uploadedMedia.mediaPath,
+      mediaType: uploadedMedia.mediaType,
       caption: story.caption?.trim() || '',
       viewers: [],
+      likedBy: [],
+      likesCount: 0,
+      commentsCount: 0,
       createdAt: serverTimestamp(),
       expiresAt,
     }
 
     const storyRef = await addDoc(collection(db, 'stories'), storyData)
-
-    if (storyData.caption) {
-      addComment(storyRef.id, {
-        userId: storyData.userId,
-        username: storyData.username,
-        userPhoto: storyData.userPhoto,
-        text: storyData.caption,
-      }, 'stories').catch(console.error)
-    }
 
     try {
       const userSnap = await getDoc(doc(db, 'users', storyData.userId));
@@ -89,6 +132,9 @@ export async function createStory(story = {}) {
       ...storyData,
     }
   } catch (error) {
+    if (uploadedStorageRef) {
+      await deleteObject(uploadedStorageRef).catch(() => {})
+    }
     throw new Error(`Failed to create story: ${error.message}`)
   }
 }
@@ -100,7 +146,7 @@ export async function createStory(story = {}) {
  */
 export async function getActiveStories(options = {}) {
   try {
-    const pageSize = options.pageSize || 20
+    const pageSize = Math.min(Math.max(options.pageSize || 20, 1), 100)
     const storiesQuery = query(
       collection(db, 'stories'),
       where('expiresAt', '>', Timestamp.now()),
@@ -123,7 +169,7 @@ export async function getActiveStories(options = {}) {
  * @returns {Function} Unsubscribe function.
  */
 export function subscribeToActiveStories(callback, onError, options = {}) {
-  const pageSize = options.pageSize || 20
+  const pageSize = Math.min(Math.max(options.pageSize || 20, 1), 100)
   const storiesQuery = query(
     collection(db, 'stories'),
     where('expiresAt', '>', Timestamp.now()),
@@ -131,18 +177,48 @@ export function subscribeToActiveStories(callback, onError, options = {}) {
     limit(pageSize)
   )
 
-  const unsubscribe = onSnapshot(
+  let expirationTimer = null
+  let latestStories = []
+
+  function emitActiveStories() {
+    if (expirationTimer) clearTimeout(expirationTimer)
+
+    const now = Date.now()
+    const activeStories = latestStories.filter((story) => {
+      const expirationTime = story.expiresAt?.toMillis?.() || 0
+      return expirationTime > now
+    })
+
+    if (callback) callback(activeStories)
+
+    const nextExpiration = activeStories.reduce((earliest, story) => {
+      const expirationTime = story.expiresAt.toMillis()
+      return Math.min(earliest, expirationTime)
+    }, Infinity)
+
+    if (Number.isFinite(nextExpiration)) {
+      expirationTimer = setTimeout(
+        emitActiveStories,
+        Math.max(nextExpiration - Date.now() + 50, 50)
+      )
+    }
+  }
+
+  const unsubscribeSnapshot = onSnapshot(
     storiesQuery,
     (snapshot) => {
-      const stories = snapshot.docs.map(mapStoryDoc)
-      if (callback) callback(stories)
+      latestStories = snapshot.docs.map(mapStoryDoc)
+      emitActiveStories()
     },
     (error) => {
       if (onError) onError(error)
     }
   )
 
-  return unsubscribe
+  return () => {
+    if (expirationTimer) clearTimeout(expirationTimer)
+    unsubscribeSnapshot()
+  }
 }
 
 /**
