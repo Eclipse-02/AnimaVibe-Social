@@ -3,9 +3,6 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, Image, ScrollView,
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import { Feather } from '@expo/vector-icons'
-import { storage } from '../../config/firebase'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { serverTimestamp } from 'firebase/firestore'
 import { createPost } from '../../lib/firestore/posts'
 import { useAuthStore } from '../../store/authStore'
 import { useThemeColors } from '../../hooks/useTheme'
@@ -70,16 +67,6 @@ export default function CreatePostScreen({ navigation }) {
     }
   }
 
-  const uploadImageAsync = async (uri) => {
-    const response = await fetch(uri)
-    const blob = await response.blob()
-    const filename = `posts/${user?.uid || 'anonymous'}_${Date.now()}.jpg`
-    const storageRef = ref(storage, filename)
-
-    await uploadBytes(storageRef, blob)
-    return await getDownloadURL(storageRef)
-  }
-
   const handleShare = async () => {
     if (!image) {
       Alert.alert('Warning', 'You must select an image first!')
@@ -95,17 +82,12 @@ export default function CreatePostScreen({ navigation }) {
     Keyboard.dismiss()
 
     try {
-      const downloadUrl = await uploadImageAsync(image)
-
       await createPost({
         userId: user.uid,
         username: userProfile?.username || user.displayName,
         userPhoto: userProfile?.photoURL || user.photoURL,
-        imageUrl: downloadUrl,
+        image,
         caption: caption.trim(),
-        likeCount: 0,
-        commentCount: 0,
-        createdAt: serverTimestamp()
       })
 
       setCaption('')
