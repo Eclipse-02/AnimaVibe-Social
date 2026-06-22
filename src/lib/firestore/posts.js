@@ -1,5 +1,4 @@
 import {
-  addDoc,
   arrayRemove,
   arrayUnion,
   collection,
@@ -200,30 +199,27 @@ export async function createPost(post = {}) {
       updatedAt: serverTimestamp(),
     }
 
-    const postRef = await addDoc(collection(db, 'posts'), postData)
+    const postRef = doc(collection(db, 'posts'))
+    const userRef = doc(db, 'users', post.userId)
 
-    if (post.userId !== 'anonymous') {
-      await updateDoc(doc(db, 'users', post.userId), {
-        postsCount: increment(1),
-        updatedAt: serverTimestamp(),
-      })
+    await runTransaction(db, async (transaction) => {
+      const userSnap = post.userId !== 'anonymous'
+        ? await transaction.get(userRef)
+        : null
 
-      try {
-        const userSnap = await getDoc(doc(db, 'users', post.userId));
-        if (userSnap.exists()) {
-          const followers = userSnap.data().followers || [];
-          if (followers.length > 0) {
-            createPostNotification(
-              { id: postRef.id, ...postData },
-              followers,
-              { username: postData.username, userPhoto: postData.userPhoto }
-            ).catch(console.error);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fan-out post notifications:', err);
+      transaction.set(postRef, postData)
+
+      if (userSnap) {
+        const userData = userSnap.exists() ? userSnap.data() : {}
+        const currentPostCount = userData.postCount ?? userData.postsCount ?? 0
+
+        transaction.set(userRef, {
+          uid: post.userId,
+          postCount: currentPostCount + 1,
+          updatedAt: serverTimestamp(),
+        }, { merge: true })
       }
-    }
+    })
 
     return {
       id: postRef.id,

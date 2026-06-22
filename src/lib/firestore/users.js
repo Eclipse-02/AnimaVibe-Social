@@ -36,7 +36,7 @@ export async function createUserProfile(uid, profile = {}) {
       following: profile.following || [],
       followersCount: profile.followersCount || 0,
       followingCount: profile.followingCount || 0,
-      postsCount: profile.postsCount || 0,
+      postCount: profile.postCount ?? profile.postsCount ?? 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }
