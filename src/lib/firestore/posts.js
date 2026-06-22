@@ -3,6 +3,7 @@ import {
   arrayUnion,
   collection,
   doc,
+  endAt,
   getDocs,
   increment,
   limit,
@@ -12,6 +13,7 @@ import {
   runTransaction,
   serverTimestamp,
   startAfter,
+  startAt,
   updateDoc,
   where,
   getDoc,
@@ -96,6 +98,36 @@ function mapFeedDoc(postDoc) {
     bookmarkedBy: data.bookmarkedBy || [],
     commentsCount: data.commentsCount || 0,
     timeAgo: getTimeAgo(data.createdAt),
+  }
+}
+
+/**
+ * Finds posts by caption prefix using an indexed Firestore query.
+ * @param {string} searchTerm Caption prefix.
+ * @param {Object} options Search options.
+ * @returns {Promise<Object[]>} Matching posts.
+ */
+export async function searchPosts(searchTerm, options = {}) {
+  try {
+    const captionPrefix = String(searchTerm || '').trim()
+    if (!captionPrefix) return []
+
+    const resultLimit = Math.min(Math.max(options.limit || 20, 1), 50)
+    const postsQuery = query(
+      collection(db, 'posts'),
+      orderBy('caption'),
+      startAt(captionPrefix),
+      endAt(`${captionPrefix}\uf8ff`),
+      limit(resultLimit)
+    )
+    const snapshot = await getDocs(postsQuery)
+
+    return snapshot.docs.map((postDoc) => ({
+      ...mapFeedDoc(postDoc),
+      type: 'post',
+    }))
+  } catch (error) {
+    throw new Error(`Failed to search posts: ${error.message}`)
   }
 }
 

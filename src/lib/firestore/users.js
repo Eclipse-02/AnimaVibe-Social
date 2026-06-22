@@ -1,12 +1,19 @@
 import {
   arrayRemove,
   arrayUnion,
+  collection,
   doc,
+  endAt,
   getDoc,
+  getDocs,
   increment,
+  limit,
+  orderBy,
+  query,
   runTransaction,
   serverTimestamp,
   setDoc,
+  startAt,
   updateDoc,
 } from 'firebase/firestore'
 import { db } from '../../config/firebase'
@@ -71,6 +78,43 @@ export async function getUserProfile(uid) {
     }
   } catch (error) {
     throw new Error(`Failed to get user profile: ${error.message}`)
+  }
+}
+
+/**
+ * Finds user profiles by username prefix.
+ * @param {string} searchTerm Username prefix, with or without a leading @.
+ * @param {Object} options Search options.
+ * @returns {Promise<Object[]>} Matching user profiles.
+ */
+export async function searchUsers(searchTerm, options = {}) {
+  try {
+    const usernamePrefix = String(searchTerm || '')
+      .trim()
+      .replace(/^@/, '')
+      .toLowerCase()
+
+    if (!usernamePrefix) return []
+
+    const resultLimit = Math.min(Math.max(options.limit || 20, 1), 50)
+    const usersQuery = query(
+      collection(db, 'users'),
+      orderBy('username'),
+      startAt(usernamePrefix),
+      endAt(`${usernamePrefix}\uf8ff`),
+      limit(resultLimit)
+    )
+    const snapshot = await getDocs(usersQuery)
+
+    return snapshot.docs
+      .filter((userDoc) => userDoc.id !== options.excludeUserId)
+      .map((userDoc) => ({
+        id: userDoc.id,
+        type: 'user',
+        ...userDoc.data(),
+      }))
+  } catch (error) {
+    throw new Error(`Failed to search users: ${error.message}`)
   }
 }
 

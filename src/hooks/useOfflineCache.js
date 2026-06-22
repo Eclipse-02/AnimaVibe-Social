@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { getOfflineCache, removeOfflineCache, setOfflineCache } from '../lib/firestore/offlineCache'
-import { useNetworkStore } from '../../store/networkStore'
+import { useNetworkStore } from '../store/networkStore'
 
 export function useOfflineCache(cacheKey) {
   const isOffline = useNetworkStore((state) => state.isOffline)

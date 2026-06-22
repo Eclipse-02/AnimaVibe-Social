@@ -18,6 +18,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useThemeColors } from '../../hooks/useTheme';
+import { searchUsers } from '../../lib/firestore/users';
+import { searchPosts } from '../../lib/firestore/posts';
 
 const { width } = Dimensions.get('window');
 const columnWidth = (width - 40) / 2;
@@ -67,100 +69,92 @@ export default function DiscoveryScreen() {
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setSearchResults([]);
+      setLoading(false);
       return;
     }
 
     setLoading(true);
     let unsubscribe = () => { };
+    let cancelled = false;
 
     const cleanQuery = searchQuery.trim().toLowerCase();
 
     if (activeTab === 'account') {
-      const displayQuery = cleanQuery.startsWith('@') ? cleanQuery.slice(1) : cleanQuery;
-      unsubscribe = firestore()
-        .collection('users')
-        .where('username', '>=', displayQuery)
-        .where('username', '<=', displayQuery + '\uf8ff')
-        .limit(20)
-        .onSnapshot(
-          snapshot => {
-            const users = [];
-            snapshot.forEach(doc => {
-              const data = doc.data();
-              if (doc.id !== currentUserId) {
-                users.push({ id: doc.id, type: 'user', ...data });
-              }
-            });
-            setSearchResults(users);
-            setLoading(false);
-          },
-          error => {
-            console.error(error);
-            setLoading(false);
-          }
-        );
+      const timer = setTimeout(async () => {
+        try {
+          const users = await searchUsers(cleanQuery, { excludeUserId: currentUserId });
+          if (!cancelled) setSearchResults(users);
+        } catch (error) {
+          console.error(error);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      }, 300);
+      unsubscribe = () => clearTimeout(timer);
     }
 
     else if (activeTab === 'hashtag') {
       const tagQuery = cleanQuery.startsWith('#') ? cleanQuery.slice(1) : cleanQuery;
-      unsubscribe = firestore()
-        .collection('posts')
-        .where('tags', 'array-contains', tagQuery)
-        .limit(20)
-        .onSnapshot(
-          snapshot => {
-            const tagsMap = new Map();
-            snapshot.forEach(doc => {
-              const data = doc.data();
-              if (data.tags && Array.isArray(data.tags)) {
-                data.tags.forEach(t => {
-                  if (t.toLowerCase().includes(tagQuery)) {
-                    if (!tagsMap.has(t)) {
-                      tagsMap.set(t, { id: t, type: 'tag', tagName: '#' + t, count: 1 });
-                    } else {
-                      tagsMap.get(t).count += 1;
+      let unsubscribeHashtag = () => { };
+      const timer = setTimeout(() => {
+        if (cancelled) return;
+        unsubscribeHashtag = firestore()
+          .collection('posts')
+          .where('tags', 'array-contains', tagQuery)
+          .limit(20)
+          .onSnapshot(
+            snapshot => {
+              const tagsMap = new Map();
+              snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.tags && Array.isArray(data.tags)) {
+                  data.tags.forEach(t => {
+                    if (t.toLowerCase().includes(tagQuery)) {
+                      if (!tagsMap.has(t)) {
+                        tagsMap.set(t, { id: t, type: 'tag', tagName: '#' + t, count: 1 });
+                      } else {
+                        tagsMap.get(t).count += 1;
+                      }
                     }
-                  }
-                });
+                  });
+                }
+              });
+              if (!cancelled) {
+                setSearchResults(Array.from(tagsMap.values()));
+                setLoading(false);
               }
-            });
-            setSearchResults(Array.from(tagsMap.values()));
-            setLoading(false);
-          },
-          error => {
-            console.error(error);
-            setLoading(false);
-          }
-        );
+            },
+            error => {
+              console.error(error);
+              if (!cancelled) setLoading(false);
+            }
+          );
+      }, 300);
+      unsubscribe = () => {
+        clearTimeout(timer);
+        unsubscribeHashtag();
+      };
     }
 
     else if (activeTab === 'post') {
-      unsubscribe = firestore()
-        .collection('posts')
-        .orderBy('createdAt', 'desc')
-        .limit(200)
-        .onSnapshot(
-          snapshot => {
-            const posts = [];
-            snapshot.forEach(doc => {
-              const data = doc.data();
-              const caption = (data.caption || '').toLowerCase();
-              if (caption.includes(cleanQuery)) {
-                posts.push({ id: doc.id, type: 'post', ...data });
-              }
-            });
-            setSearchResults(posts);
-            setLoading(false);
-          },
-          error => {
-            console.error(error);
-            setLoading(false);
-          }
-        );
+      const timer = setTimeout(async () => {
+        try {
+          const posts = await searchPosts(searchQuery);
+          if (!cancelled) setSearchResults(posts);
+        } catch (error) {
+          console.error(error);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      }, 300);
+      unsubscribe = () => clearTimeout(timer);
     }
 
-    return () => unsubscribe();
-  }, [searchQuery, activeTab]);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [searchQuery, activeTab, currentUserId]);
 
   const handleCancelSearch = () => {
     setIsSearching(false);
