@@ -55,8 +55,8 @@ export default function PostCard({ post, onActionToast }) {
   function triggerLikeAnimation() {
     scaleValue.value = 0
     scaleValue.value = withSequence(
-      withSpring(1, { damping: 9, stiffness: 200 }),
-      withDelay(150, withTiming(0, { duration: 100 }))
+      withSpring(1, { damping: 12, stiffness: 420 }),
+      withDelay(80, withTiming(0, { duration: 70 }))
     )
 
     if (!liked) {
