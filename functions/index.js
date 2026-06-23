@@ -1,4 +1,5 @@
 const { onDocumentCreated } = require('firebase-functions/v2/firestore')
+const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { logger } = require('firebase-functions')
 const admin = require('firebase-admin')
 
@@ -117,3 +118,65 @@ exports.sendNotificationPush = onDocumentCreated(
     })
   }
 )
+
+/**
+ * Removes expired story documents and their Storage objects. The client query
+ * hides expired stories immediately; this job handles permanent cleanup.
+ */
+exports.cleanupExpiredStories = onSchedule('every 60 minutes', async () => {
+  const snapshot = await db
+    .collection('stories')
+    .where('expiresAt', '<=', admin.firestore.Timestamp.now())
+    .limit(400)
+    .get()
+
+  if (snapshot.empty) {
+    logger.info('No expired stories to clean up.')
+    return
+  }
+
+  const bucket = admin.storage().bucket()
+  const cleanupResults = await Promise.all(
+    snapshot.docs.map(async (storyDoc) => {
+      const { mediaPath, userId } = storyDoc.data()
+
+      // Never let a client-supplied path make this privileged function delete
+      // files outside that story owner's folder.
+      if (!mediaPath || !mediaPath.startsWith(`stories/${userId}/`)) {
+        return { storyDoc, canDeleteDocument: true, mediaDeleted: false }
+      }
+
+      try {
+        await bucket.file(mediaPath).delete()
+        return { storyDoc, canDeleteDocument: true, mediaDeleted: true }
+      } catch (error) {
+        if (error.code === 404) {
+          return { storyDoc, canDeleteDocument: true, mediaDeleted: false }
+        }
+
+        logger.error('Failed to delete expired story media.', {
+          storyId: storyDoc.id,
+          mediaPath,
+          error: error.message,
+        })
+        return { storyDoc, canDeleteDocument: false, mediaDeleted: false }
+      }
+    })
+  )
+
+  const batch = db.batch()
+  const removableStories = cleanupResults.filter(
+    ({ canDeleteDocument }) => canDeleteDocument
+  )
+  removableStories.forEach(({ storyDoc }) => batch.delete(storyDoc.ref))
+
+  if (removableStories.length > 0) {
+    await batch.commit()
+  }
+
+  logger.info('Expired stories cleaned up.', {
+    storyCount: removableStories.length,
+    mediaCount: cleanupResults.filter(({ mediaDeleted }) => mediaDeleted).length,
+    retryCount: snapshot.size - removableStories.length,
+  })
+})

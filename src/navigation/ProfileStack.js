@@ -1,6 +1,6 @@
 import React from 'react'
 import { createDrawerNavigator } from '@react-navigation/drawer'
-import ProfileScreen from '../screens/ProfileScreen'
+import ProfileScreen from '../screens/profile/ProfileScreen'
 import ProfileDrawerContent from '../components/ProfileDrawerContent'
 
 const Drawer = createDrawerNavigator()

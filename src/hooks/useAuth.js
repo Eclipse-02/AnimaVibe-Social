@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
-import { useAuthStore } from '../store/useAuthStore'
-import { registerWithEmail, loginWithEmail, logout as firebaseLogout } from '../services/authService'
-import { getUserProfile } from '../services/users'
+import { useAuthStore } from '../store/authStore'
+import { registerWithEmail, loginWithEmail, logout as firebaseLogout } from '../lib/firestore/authService'
+import { getUserProfile } from '../lib/firestore/users'
 
 export function useAuth() {
   const setUser = useAuthStore((state) => state.setUser)
@@ -15,7 +15,7 @@ export function useAuth() {
     setError(null)
     try {
       const user = await registerWithEmail(email, password, displayName)
-      
+
       const serializableUser = {
         uid: user.uid,
         email: user.email,
@@ -24,7 +24,6 @@ export function useAuth() {
       }
       setUser(serializableUser)
 
-      // Fetch the newly created profile from Firestore
       const profile = await getUserProfile(user.uid)
       setUserProfile(profile)
       return { success: true }
@@ -42,7 +41,7 @@ export function useAuth() {
     setError(null)
     try {
       const user = await loginWithEmail(email, password)
-      
+
       const serializableUser = {
         uid: user.uid,
         email: user.email,
@@ -51,7 +50,6 @@ export function useAuth() {
       }
       setUser(serializableUser)
 
-      // Fetch user profile from Firestore
       const profile = await getUserProfile(user.uid)
       setUserProfile(profile)
       return { success: true }

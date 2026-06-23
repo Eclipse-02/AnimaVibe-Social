@@ -7,7 +7,6 @@ const ScreenWrapper = ({ name }) => (
   </View>
 )
 
-// Sisa halaman yang BELUM dibikinin file aslinya:
 export const ForgotPasswordScreen = () => <ScreenWrapper name="Forgot Password Screen" />
 export const CreatePostScreen = () => <ScreenWrapper name="Create Post Screen" />
 export const PostDetailScreen = () => <ScreenWrapper name="Post Detail Screen" />
