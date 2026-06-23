@@ -69,7 +69,10 @@ export default function DiscoveryScreen() {
         snapshot => {
           const posts = [];
           snapshot.forEach(doc => {
-            posts.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            // Skip archived posts — they should not appear in the discovery grid
+            if (data.archived === true) return;
+            posts.push({ id: doc.id, ...data });
           });
           setRecentPosts(posts);
         },
@@ -119,6 +122,8 @@ export default function DiscoveryScreen() {
               const tagsMap = new Map();
               snapshot.forEach(doc => {
                 const data = doc.data();
+                // Skip archived posts — their tags must not count toward the hashtag counter
+                if (data.archived === true) return;
                 if (data.tags && Array.isArray(data.tags)) {
                   data.tags.forEach(t => {
                     if (t.toLowerCase().includes(tagQuery)) {
