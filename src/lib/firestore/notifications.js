@@ -546,23 +546,12 @@ export async function initFCM(userId, onNotificationOpen) {
   const cleanups = []
 
   try {
-    let authStatus
-    try {
-      authStatus = await messaging().requestPermission()
-    } catch (err) {
-      // If this throws with "SERVICE_NOT_FOUND" / "null is not an object",
-      // the @react-native-firebase native module isn't linked into the build.
-      console.error('[FCM] requestPermission() threw:', err?.code || err?.message || err)
-      return () => {}
-    }
-
-    console.log('[FCM] Permission status:', authStatus)
+    const authStatus = await messaging().requestPermission()
     const enabled =
       authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
       authStatus === messaging.AuthorizationStatus.PROVISIONAL
 
     if (!enabled) {
-      console.warn('[FCM] Notification permission not granted — getToken skipped.')
       return () => {}
     }
 
@@ -575,28 +564,13 @@ export async function initFCM(userId, onNotificationOpen) {
       })
     }
 
-    let token
-    try {
-      token = await messaging().getToken()
-    } catch (err) {
-      // This is the line that decides whether a push can ever be delivered.
-      // Common codes: SERVICE_NOT_FOUND (Firebase not initialised natively),
-      // INVALID_SENDER, or a network/runtime error.
-      console.error('[FCM] getToken() FAILED:', err?.code || err?.message || err)
-      return () => {}
-    }
-
+    const token = await messaging().getToken()
     if (token) {
-      try {
-        await saveDeviceToken(userId, {
-          token,
-          provider: 'fcm',
-          platform: Platform.OS,
-        })
-        console.log('[FCM] Token saved to Firestore for user', userId)
-      } catch (err) {
-        console.error('[FCM] saveDeviceToken() FAILED:', err?.message || err)
-      }
+      await saveDeviceToken(userId, {
+        token,
+        provider: 'fcm',
+        platform: Platform.OS,
+      })
     }
 
     const unsubRefresh = messaging().onTokenRefresh(async (newToken) => {

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import auth from '@react-native-firebase/auth';
 import { useAuthStore } from '../store/authStore';
 import { getUserProfile } from '../lib/firestore/users';
+import { initFCM } from '../lib/firestore/notifications';
 
 GoogleSignin.configure({
     webClientId: '864208355889-2972qm34bdfguk9ken2ijmfnvub3vf3o.apps.googleusercontent.com',
@@ -13,6 +14,7 @@ export function useGoogleAuth() {
     const [error, setError] = useState(null);
     const setUser = useAuthStore((state) => state.setUser);
     const setUserProfile = useAuthStore((state) => state.setUserProfile);
+    const fcmTeardownRef = useRef(null);
 
     const signInWithGoogle = async () => {
         try {
@@ -48,7 +50,19 @@ export function useGoogleAuth() {
                 console.error('[useGoogleAuth] Error fetching user profile:', err);
             }
 
-            return { success: true, user: serializableUser };
+            // ── Init FCM — delayed to avoid POST_NOTIFICATIONS dialog
+            // colliding with the just-dismissed Google picker activity ──
+            fcmTeardownRef.current?.();
+            const timer = setTimeout(async () => {
+                try {
+                    const teardown = await initFCM(firebaseUser.uid);
+                    fcmTeardownRef.current = teardown;
+                } catch (err) {
+                    console.error('[useGoogleAuth] FCM init error:', err);
+                }
+            }, 1500);
+
+            return { success: true, user: serializableUser, fcmTimer: timer };
         } catch (err) {
             console.error('[useGoogleAuth] Google Sign-In Error:', err);
             setError(err.message);
@@ -61,6 +75,10 @@ export function useGoogleAuth() {
     const signOut = async () => {
         try {
             setLoading(true);
+            if (fcmTeardownRef.current) {
+                fcmTeardownRef.current();
+                fcmTeardownRef.current = null;
+            }
             await GoogleSignin.signOut();
             await auth().signOut();
             setUser(null);
