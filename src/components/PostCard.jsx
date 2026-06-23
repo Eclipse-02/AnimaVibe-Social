@@ -9,6 +9,7 @@ import { archivePost, deletePost, toggleLikePost, toggleBookmarkPost } from '../
 import { useAuthStore } from '../store/authStore'
 import { useThemeColors } from '../hooks/useTheme'
 import ConfirmationModal from './ui/ConfirmationModal'
+import PhotoViewer from './photo/PhotoViewer'
 
 /**
  * Renders one feed post and owner actions.
@@ -37,6 +38,7 @@ export default function PostCard({ post, onActionToast }) {
   const [isActionLoading, setActionLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [isToastVisible, setToastVisible] = useState(false)
+  const [viewerVisible, setViewerVisible] = useState(false)
   const menuButtonRef = React.useRef(null)
   const scaleValue = useSharedValue(0)
   const menuProgress = useSharedValue(0)
@@ -63,15 +65,7 @@ export default function PostCard({ post, onActionToast }) {
   }
 
   function openPostDetail() {
-    const tabNavigator = navigation.getParent?.()
-    const rootNavigator = tabNavigator?.getParent?.()
-
-    if (rootNavigator) {
-      rootNavigator.navigate('PostDetail', { post })
-      return
-    }
-
-    navigation.navigate('PostDetail', { post })
+    setViewerVisible(true)
   }
 
   const doubleTap = Gesture.Tap()
@@ -397,6 +391,14 @@ export default function PostCard({ post, onActionToast }) {
           if (!isActionLoading) setConfirmation(null)
         }}
         onConfirm={() => confirmation?.onConfirm?.()}
+      />
+
+      <PhotoViewer
+        visible={viewerVisible}
+        uri={post.imageUrl}
+        username={post.username}
+        caption={post.caption}
+        onClose={() => setViewerVisible(false)}
       />
     </View>
   )

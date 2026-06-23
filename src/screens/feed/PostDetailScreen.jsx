@@ -27,6 +27,7 @@ import { followUser, unfollowUser } from '../../lib/firestore/users'
 import { useAuthStore } from '../../store/authStore'
 import { useThemeColors } from '../../hooks/useTheme'
 import ConfirmationModal from '../../components/ui/ConfirmationModal'
+import PhotoViewer from '../../components/photo/PhotoViewer'
 
 /**
  * Shows a single post from root navigation with follow, owner actions, and tagged caption links.
@@ -57,6 +58,7 @@ export default function PostDetailScreen({ route, navigation }) {
   const [isMenuOpen, setMenuOpen] = useState(false)
   const [confirmation, setConfirmation] = useState(null)
   const [isActionLoading, setActionLoading] = useState(false)
+  const [viewerVisible, setViewerVisible] = useState(false)
 
   const imageOpacity = useSharedValue(0)
   const contentOpacity = useSharedValue(0)
@@ -107,6 +109,20 @@ export default function PostDetailScreen({ route, navigation }) {
     }
   }
 
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onStart(() => {
+      runOnJS(triggerHeartAnim)()
+    })
+
+  const singleTap = Gesture.Tap()
+    .numberOfTaps(1)
+    .onStart(() => {
+      runOnJS(setViewerVisible)(true)
+    })
+
+  const imageTap = Gesture.Exclusive(doubleTap, singleTap)
+
   const handleLikePress = async () => {
     if (!currentUid) return
     const wasLiked = liked
@@ -122,12 +138,6 @@ export default function PostDetailScreen({ route, navigation }) {
       setLikeCount((prev) => (wasLiked ? prev + 1 : prev - 1))
     }
   }
-
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .onStart(() => {
-      runOnJS(triggerHeartAnim)()
-    })
 
   const displayLikeCount = likeCount >= 1000
     ? `${(likeCount / 1000).toFixed(1)}k`
@@ -353,7 +363,7 @@ export default function PostDetailScreen({ route, navigation }) {
         </Animated.View>
 
         {/* Hero image */}
-        <GestureDetector gesture={doubleTap}>
+        <GestureDetector gesture={imageTap}>
           <Animated.View style={[styles.imageWrapper, heroImageStyle]}>
             <Image
               source={{ uri: post.imageUrl || post.image }}
@@ -429,6 +439,14 @@ export default function PostDetailScreen({ route, navigation }) {
           if (!isActionLoading) setConfirmation(null)
         }}
         onConfirm={() => confirmation?.onConfirm?.()}
+      />
+
+      <PhotoViewer
+        visible={viewerVisible}
+        uri={post.imageUrl || post.image}
+        username={post.username}
+        caption={post.caption}
+        onClose={() => setViewerVisible(false)}
       />
     </View>
   )
