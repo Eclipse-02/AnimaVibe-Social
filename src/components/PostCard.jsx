@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { Modal, Pressable, StyleSheet, View, Text, TouchableOpacity, Share } from 'react-native'
+import { Modal, Pressable, StyleSheet, View, Text, TouchableOpacity } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withDelay, withTiming, runOnJS } from 'react-native-reanimated'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
@@ -10,6 +10,8 @@ import { useAuthStore } from '../store/authStore'
 import { useThemeColors } from '../hooks/useTheme'
 import ConfirmationModal from './ui/ConfirmationModal'
 import PhotoViewer from './photo/PhotoViewer'
+import { File, Paths } from 'expo-file-system'
+import Share from 'react-native-share'
 
 /**
  * Renders one feed post and owner actions.
@@ -148,11 +150,31 @@ export default function PostCard({ post, onActionToast }) {
   const onShare = async () => {
     setMenuOpen(false)
     try {
-      await Share.share({
-        message: `Check out this post by ${post.username}: ${post.caption}`,
+      const deepLink = `https://animavibe.app/post/${post.id}`
+      const message = post.caption
+        ? `${post.caption}\n\n${deepLink}`
+        : `Check out this post by ${post.username} on AnimaVibe!\n\n${deepLink}`
+
+      if (!post.imageUrl) {
+        await Share.open({ message, title: 'Share Post' }).catch(() => {})
+        return
+      }
+
+      const destination = new File(Paths.cache, `shared-${post.id || Date.now()}.jpg`)
+      if (destination.exists) destination.delete()
+      const file = await File.downloadFileAsync(post.imageUrl, destination)
+
+      await Share.open({
+        url: file.uri,
+        type: 'image/jpeg',
+        message,
+        title: 'Share Post',
       })
     } catch (error) {
-      console.log(error.message)
+      // react-native-share rejects when the user dismisses the sheet
+      if (error?.message !== 'User did not share') {
+        console.log('Share error:', error?.message || error)
+      }
     }
   }
 
