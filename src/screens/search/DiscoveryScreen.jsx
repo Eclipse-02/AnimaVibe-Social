@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,11 +10,13 @@ import {
   Dimensions,
   TextInput,
   ActivityIndicator,
+  ScrollView,
   Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import PagerView from 'react-native-pager-view';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
 import { useThemeColors } from '../../hooks/useTheme';
@@ -24,6 +26,9 @@ import { searchPosts } from '../../lib/firestore/posts';
 const { width } = Dimensions.get('window');
 const columnWidth = (width - 40) / 2;
 const tripleColumnWidth = (width - 48) / 3;
+
+const TAB_NAMES = ['account', 'hashtag', 'post'];
+const TAB_LABELS = ['Account', 'Hashtag', 'Post'];
 
 export default function DiscoveryScreen() {
   const navigation = useNavigation();
@@ -35,6 +40,10 @@ export default function DiscoveryScreen() {
   const [searchResults, setSearchResults] = useState([]);
   const [recentPosts, setRecentPosts] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [trendingTags, setTrendingTags] = useState([]);
+  const [trendingLoading, setTrendingLoading] = useState(false);
+
+  const pagerRef = useRef(null);
   const currentUserId = auth().currentUser?.uid;
   const colors = useThemeColors();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
@@ -42,20 +51,21 @@ export default function DiscoveryScreen() {
   const openRootPostDetail = (post) => {
     const tabNavigator = navigation.getParent?.();
     const rootNavigator = tabNavigator?.getParent?.();
-
     if (rootNavigator) {
       rootNavigator.navigate('PostDetail', { post });
       return;
     }
-
     navigation.navigate('PostDetail', { post });
   };
 
   useEffect(() => {
     if (route.params?.searchQuery) {
+      const tab = route.params.activeTab || 'account';
       setIsSearching(true);
       setSearchQuery(route.params.searchQuery);
-      if (route.params.activeTab) setActiveTab(route.params.activeTab);
+      setActiveTab(tab);
+      const idx = TAB_NAMES.indexOf(tab);
+      if (idx >= 0) pagerRef.current?.setPage(idx);
     }
   }, [route.params?.searchQuery, route.params?.activeTab]);
 
@@ -70,13 +80,46 @@ export default function DiscoveryScreen() {
           const posts = [];
           snapshot.forEach(doc => {
             const data = doc.data();
-            // Skip archived posts — they should not appear in the discovery grid
             if (data.archived === true) return;
             posts.push({ id: doc.id, ...data });
           });
           setRecentPosts(posts);
         },
         error => console.error(error)
+      );
+    return () => unsubscribe();
+  }, [isSearching]);
+
+  useEffect(() => {
+    if (isSearching) return;
+    setTrendingLoading(true);
+    const unsubscribe = firestore()
+      .collection('posts')
+      .orderBy('createdAt', 'desc')
+      .limit(200)
+      .onSnapshot(
+        snapshot => {
+          const tagCounts = new Map();
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.archived === true) return;
+            if (Array.isArray(data.tags)) {
+              data.tags.forEach(t => {
+                tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+              });
+            }
+          });
+          const sorted = Array.from(tagCounts.entries())
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 8)
+            .map(([tag, count]) => ({ tag: `#${tag}`, raw: tag, count }));
+          setTrendingTags(sorted);
+          setTrendingLoading(false);
+        },
+        error => {
+          console.error(error);
+          setTrendingLoading(false);
+        }
       );
     return () => unsubscribe();
   }, [isSearching]);
@@ -91,7 +134,6 @@ export default function DiscoveryScreen() {
     setLoading(true);
     let unsubscribe = () => { };
     let cancelled = false;
-
     const cleanQuery = searchQuery.trim().toLowerCase();
 
     if (activeTab === 'account') {
@@ -122,7 +164,6 @@ export default function DiscoveryScreen() {
               const tagsMap = new Map();
               snapshot.forEach(doc => {
                 const data = doc.data();
-                // Skip archived posts — their tags must not count toward the hashtag counter
                 if (data.archived === true) return;
                 if (data.tags && Array.isArray(data.tags)) {
                   data.tags.forEach(t => {
@@ -173,6 +214,24 @@ export default function DiscoveryScreen() {
     };
   }, [searchQuery, activeTab, currentUserId]);
 
+  const handleTabPress = (tab) => {
+    const idx = TAB_NAMES.indexOf(tab);
+    pagerRef.current?.setPage(idx);
+    if (tab !== activeTab) {
+      setActiveTab(tab);
+      setSearchResults([]);
+    }
+  };
+
+  const handlePageSelected = useCallback((e) => {
+    const idx = e.nativeEvent.position;
+    const tab = TAB_NAMES[idx];
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+      setSearchResults([]);
+    }
+  }, [activeTab]);
+
   const handleCancelSearch = () => {
     setIsSearching(false);
     setSearchQuery('');
@@ -180,70 +239,67 @@ export default function DiscoveryScreen() {
     setActiveTab('account');
   };
 
-  const renderSearchItem = ({ item }) => {
-    if (activeTab === 'account') {
-      return (
-        <TouchableOpacity
-          style={styles.userCard}
-          onPress={() =>
-            navigation.navigate('ProfileScreen', { userId: item.id })
-          }
-        >
-          <Image
-            source={item.photoURL}
-            style={styles.searchAvatar}
-            contentFit="cover"
-          />
-          <View style={styles.userInfo}>
-            <Text style={styles.usernameText}>{item.username}</Text>
-            <Text style={styles.subText}>{item.displayName || 'User AnimaVibe'}</Text>
-            {item.followersCount > 0 && <Text style={styles.subText}>{item.followersCount} followers</Text>}
-          </View>
-        </TouchableOpacity>
-      );
-    }
+  const renderAccountItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.userCard}
+      onPress={() => navigation.navigate('ProfileScreen', { userId: item.id })}
+    >
+      <Image source={item.photoURL} style={styles.searchAvatar} contentFit="cover" />
+      <View style={styles.userInfo}>
+        <Text style={styles.usernameText}>{item.username}</Text>
+        <Text style={styles.subText}>{item.displayName || 'User AnimaVibe'}</Text>
+        {item.followersCount > 0 && (
+          <Text style={styles.subText}>{item.followersCount} followers</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
 
-    if (activeTab === 'hashtag') {
-      return (
-        <TouchableOpacity
-          style={styles.userCard}
-          onPress={() => {
-            setIsSearching(true);
-            setSearchQuery(item.tagName);
-            setActiveTab('post');
-          }}
-        >
-          <View style={styles.hashtagIconCircle}>
-            <Text style={styles.hashtagSymbol}>#</Text>
-          </View>
-          <View style={styles.userInfo}>
-            <Text style={styles.usernameText}>{item.tagName}</Text>
-            <Text style={styles.subText}>
-              {item.count > 1000 ? (item.count / 1000).toFixed(1) + 'K' : item.count} posts
-            </Text>
-          </View>
-        </TouchableOpacity>
-      );
-    }
+  const renderHashtagItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.userCard}
+      onPress={() => {
+        setSearchQuery(item.tagName);
+        setActiveTab('post');
+        pagerRef.current?.setPage(TAB_NAMES.indexOf('post'));
+      }}
+    >
+      <View style={styles.hashtagIconCircle}>
+        <Text style={styles.hashtagSymbol}>#</Text>
+      </View>
+      <View style={styles.userInfo}>
+        <Text style={styles.usernameText}>{item.tagName}</Text>
+        <Text style={styles.subText}>
+          {item.count > 1000 ? (item.count / 1000).toFixed(1) + 'K' : item.count} posts
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
-    if (activeTab === 'post') {
-      return (
-        <TouchableOpacity
-          style={styles.postGridItem}
-          onPress={() => openRootPostDetail(item)}
-        >
-          <Image source={{ uri: item.mediaURL || item.image }} style={styles.postGridImage} contentFit="cover" />
-        </TouchableOpacity>
-      );
-    }
+  const renderPostItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.postGridItem}
+      onPress={() => openRootPostDetail(item)}
+    >
+      <Image
+        source={{ uri: item.mediaURL || item.image }}
+        style={styles.postGridImage}
+        contentFit="cover"
+      />
+    </TouchableOpacity>
+  );
 
-    return null;
-  };
+  const emptyText = !loading && searchQuery.length > 0
+    ? 'Result not found.'
+    : 'Type a search query...';
+
+  const listEmptyComponent = <Text style={styles.emptyText}>{emptyText}</Text>;
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
+      {/* Search bar */}
       <View style={styles.headerRow}>
         <View style={[styles.searchContainer, isSearching && { flex: 1, marginRight: 0 }]}>
           <Ionicons name="search" size={20} color={colors.textMuted} />
@@ -273,70 +329,104 @@ export default function DiscoveryScreen() {
 
       {isSearching ? (
         <View style={{ flex: 1 }}>
+          {/* Swipable tab bar */}
           <View style={styles.tabBarContainer}>
-            {['account', 'hashtag', 'post'].map((tab) => (
+            {TAB_NAMES.map((tab, i) => (
               <TouchableOpacity
                 key={tab}
                 style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
-                onPress={() => {
-                  setActiveTab(tab);
-                  setSearchResults([]);
-                }}
+                onPress={() => handleTabPress(tab)}
               >
                 <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                  {tab === 'account' ? 'Account' : tab === 'hashtag' ? 'Hashtag' : 'Post'}
+                  {TAB_LABELS[i]}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
           {loading && (
-            <ActivityIndicator
-              size="small"
-              color={colors.text}
-              style={{ marginTop: 15 }}
-            />
+            <ActivityIndicator size="small" color={colors.text} style={{ marginTop: 15 }} />
           )}
 
-          <FlatList
-            key={activeTab === 'post' ? 'post-grid' : 'normal-list'}
-            data={searchResults}
-            renderItem={renderSearchItem}
-            keyExtractor={(item, index) => item.id || index.toString()}
-            numColumns={activeTab === 'post' ? 3 : 1}
-            columnWrapperStyle={activeTab === 'post' ? styles.postColumnWrapper : null}
-            contentContainerStyle={{ paddingHorizontal: activeTab === 'post' ? 0 : 16, paddingTop: 8 }}
-            ListEmptyComponent={
-              !loading && searchQuery.length > 0 ? (
-                <Text style={styles.emptyText}>Result not found.</Text>
-              ) : (
-                <Text style={styles.emptyText}>Type a search query...</Text>
-              )
-            }
-          />
+          {/* Swipable PagerView — one page per tab */}
+          <PagerView
+            ref={pagerRef}
+            style={{ flex: 1 }}
+            initialPage={TAB_NAMES.indexOf(activeTab)}
+            onPageSelected={handlePageSelected}
+          >
+            {/* Account page */}
+            <View key="account" style={{ flex: 1 }}>
+              <FlatList
+                data={activeTab === 'account' ? searchResults : []}
+                renderItem={renderAccountItem}
+                keyExtractor={(item, index) => item.id || index.toString()}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={listEmptyComponent}
+              />
+            </View>
+
+            {/* Hashtag page */}
+            <View key="hashtag" style={{ flex: 1 }}>
+              <FlatList
+                data={activeTab === 'hashtag' ? searchResults : []}
+                renderItem={renderHashtagItem}
+                keyExtractor={(item, index) => item.id || index.toString()}
+                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={listEmptyComponent}
+              />
+            </View>
+
+            {/* Post page */}
+            <View key="post" style={{ flex: 1 }}>
+              <FlatList
+                data={activeTab === 'post' ? searchResults : []}
+                renderItem={renderPostItem}
+                keyExtractor={(item, index) => item.id || index.toString()}
+                numColumns={3}
+                columnWrapperStyle={styles.postColumnWrapper}
+                contentContainerStyle={{ paddingTop: 8 }}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={listEmptyComponent}
+              />
+            </View>
+          </PagerView>
         </View>
       ) : (
-
         <View style={{ flex: 1 }}>
+          {/* Trending hashtags (real data, sorted by post count) */}
           <View style={styles.trendingContainer}>
             <Text style={styles.trendingTitle}>TRENDING</Text>
-            <View style={styles.tagRow}>
-              {['#photography', '#design', '#travel', '#architecture'].map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={styles.tag}
-                  onPress={() => {
-                    setIsSearching(true);
-                    setSearchQuery(tag);
-                    setActiveTab('post');
-                  }}
-                >
-                  <Text style={styles.tagText}>{tag}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {trendingLoading ? (
+              <ActivityIndicator size="small" color={colors.textMuted} style={{ marginTop: 6 }} />
+            ) : trendingTags.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.tagRow}
+              >
+                {trendingTags.map(({ tag, raw, count }) => (
+                  <TouchableOpacity
+                    key={tag}
+                    style={styles.tag}
+                    onPress={() => {
+                      setIsSearching(true);
+                      setSearchQuery(tag);
+                      setActiveTab('post');
+                    }}
+                  >
+                    <Text style={styles.tagText}>{tag}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={[styles.subText, { marginTop: 8 }]}>No trending tags yet</Text>
+            )}
           </View>
 
+          {/* Recent posts grid */}
           <FlatList
             key="discovery-grid"
             data={recentPosts}
@@ -344,15 +434,12 @@ export default function DiscoveryScreen() {
               const isTall = index % 3 === 0;
               return (
                 <TouchableOpacity
-                  style={[
-                    styles.imageWrapper,
-                    { height: isTall ? 250 : 150 }
-                  ]}
+                  style={[styles.imageWrapper, { height: isTall ? 250 : 150 }]}
                   activeOpacity={0.9}
                   onPress={() => openRootPostDetail(item)}
                 >
                   <Image
-                    source={{ uri: item.mediaURL || item.image }}
+                    source={{ uri: item.mediaURL || item.imageUrl || item.image }}
                     style={styles.image}
                     contentFit="cover"
                   />
@@ -363,9 +450,7 @@ export default function DiscoveryScreen() {
             numColumns={2}
             columnWrapperStyle={styles.columnWrapper}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <Text style={styles.emptyText}>No recent posts.</Text>
-            }
+            ListEmptyComponent={<Text style={styles.emptyText}>No recent posts.</Text>}
           />
         </View>
       )}
@@ -448,21 +533,29 @@ const getStyles = (colors) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: 'bold',
-    marginBottom: 8
+    letterSpacing: 1,
+    marginBottom: 10
   },
   tagRow: {
-    flexDirection: 'row'
+    flexDirection: 'row',
+    gap: 8,
   },
   tag: {
     backgroundColor: colors.surfaceHigh,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
   },
   tagText: {
     color: colors.text,
-    fontSize: 12
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tagCount: {
+    color: colors.textMuted,
+    fontSize: 10,
+    marginTop: 2,
   },
   columnWrapper: {
     justifyContent: 'space-between',
