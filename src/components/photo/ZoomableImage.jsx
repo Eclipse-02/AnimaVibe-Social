@@ -20,7 +20,7 @@ const SWIPE_DOWN_VELOCITY = 700
  * All gesture callbacks run on the UI thread via Reanimated 2.
  *
  * Gesture map:
- *  - Pinch  → zoom MIN_SCALE…MAX_SCALE; snaps to 1 when released below 1.05×
+ *  - Pinch        → zoom MIN_SCALE…MAX_SCALE; snaps to 1 when released below 1.05×
  *  - Pan (zoomed) → translate clamped to image bounds
  *  - Pan (at 1×)  → free vertical drag; fires onSwipeDown past threshold
  *  - Double-tap   → toggle 1× ↔ 2.5×
@@ -31,7 +31,17 @@ const SWIPE_DOWN_VELOCITY = 700
  *   contentFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down',
  *   cachePolicy?: string,
  *   onSwipeDown?: () => void,
+ *   horizontalPassthrough?: boolean,
  * }} props
+ *
+ * @description
+ * `horizontalPassthrough` — when `true`, the pan gesture will FAIL if the
+ * first movement is primarily horizontal (|ΔX| > 15 px before activating).
+ * This lets a parent `PagerView` or similar component receive horizontal
+ * swipes while still allowing pinch-zoom and vertical swipe-dismiss.
+ * Set this to `true` inside story viewers; leave `false` (default) for the
+ * standalone full-screen photo viewer where horizontal panning while zoomed
+ * should be captured.
  */
 export default function ZoomableImage({
   uri,
@@ -39,6 +49,7 @@ export default function ZoomableImage({
   contentFit = 'contain',
   cachePolicy = 'disk',
   onSwipeDown,
+  horizontalPassthrough = false,
 }) {
   const onSwipeDownRef = useRef(onSwipeDown)
   onSwipeDownRef.current = onSwipeDown
@@ -74,8 +85,21 @@ export default function ZoomableImage({
       }
     })
 
-  const panGesture = Gesture.Pan()
-    .averageTouches(true)
+  // Pan gesture
+  // When horizontalPassthrough=true:
+  //   .failOffsetX([-15, 15])   → gesture FAILS if horizontal movement
+  //                                exceeds ±15 px before activating, letting
+  //                                PagerView's native gesture handle the swipe.
+  //   .activeOffsetY([-10, 10]) → gesture ACTIVATES only on vertical movement.
+  // When horizontalPassthrough=false (default, PhotoViewer):
+  //   No restrictions — pan works in all directions for zoomed panning.
+  const panBase = Gesture.Pan().averageTouches(true)
+
+  const panGesture = (
+    horizontalPassthrough
+      ? panBase.failOffsetX([-15, 15]).activeOffsetY([-10, 10])
+      : panBase
+  )
     .onStart(() => {
       savedTx.value = translateX.value
       savedTy.value = translateY.value
@@ -116,7 +140,7 @@ export default function ZoomableImage({
         savedTx.value = 0
         savedTy.value = 0
       } else {
-        scale.value = withSpring(2.5, { damping: 20, stiffness: 200 })
+        scale.value      = withSpring(2.5, { damping: 20, stiffness: 200 })
         savedScale.value = 2.5
       }
     })

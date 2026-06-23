@@ -57,6 +57,26 @@ export default function FeedScreen({ navigation }) {
     };
   }, []);
 
+  const otherUserStories = React.useMemo(() => {
+    const map = new Map();
+    stories.forEach(s => {
+      if (s.userId !== user?.uid && userProfile?.following?.includes(s.userId)) {
+        if (!map.has(s.userId)) {
+          map.set(s.userId, { ...s, allSeen: s.viewers?.includes(user?.uid) || false });
+        } else {
+          const existing = map.get(s.userId);
+          if (!s.viewers?.includes(user?.uid)) existing.allSeen = false;
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [stories, user?.uid, userProfile?.following]);
+
+  const storyUserIds = React.useMemo(
+    () => otherUserStories.map(s => s.userId),
+    [otherUserStories]
+  );
+
   const renderStory = ({ item, index }) => {
     if (!user) return null;
     const isMine = index === 0;
@@ -139,7 +159,7 @@ export default function FeedScreen({ navigation }) {
                 navigation.navigate('CreateStoryScreen');
               }
             } else {
-              navigation.navigate('StoryScreen', { userId: item.userId });
+              navigation.navigate('StoryScreen', { userId: item.userId, storyUserIds });
             }
           }}
         >
@@ -207,28 +227,7 @@ export default function FeedScreen({ navigation }) {
               </View>
 
               <FlatList
-                data={[
-                  { id: 'me' },
-                  ...(() => {
-                    const map = new Map();
-                    stories.forEach(s => {
-                      if (s.userId !== user?.uid && userProfile?.following?.includes(s.userId)) {
-                        if (!map.has(s.userId)) {
-                          map.set(s.userId, {
-                            ...s,
-                            allSeen: s.viewers?.includes(user?.uid) || false
-                          });
-                        } else {
-                          const existing = map.get(s.userId);
-                          if (!s.viewers?.includes(user?.uid)) {
-                            existing.allSeen = false;
-                          }
-                        }
-                      }
-                    });
-                    return Array.from(map.values());
-                  })()
-                ]}
+                data={[{ id: 'me' }, ...otherUserStories]}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 renderItem={renderStory}
