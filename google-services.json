@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "864208355889",
+    "project_id": "animavibe-social-e32e7",
+    "storage_bucket": "animavibe-social-e32e7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:864208355889:android:c1760476a7cdb31ca48b10",
+        "android_client_info": {
+          "package_name": "com.anonymous.AnimaVibeSocial"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "864208355889-2972qm34bdfguk9ken2ijmfnvub3vf3o.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAeQ4n34vGvjFkXcQ_kuCmACq01bRPV80I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "864208355889-2972qm34bdfguk9ken2ijmfnvub3vf3o.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
