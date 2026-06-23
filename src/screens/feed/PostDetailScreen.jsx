@@ -22,7 +22,7 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
-import { archivePost, deletePost, toggleLikePost } from '../../lib/firestore/posts'
+import { archivePost, deletePost, toggleLikePost, unarchivePost } from '../../lib/firestore/posts'
 import { followUser, unfollowUser } from '../../lib/firestore/users'
 import { useAuthStore } from '../../store/authStore'
 import { useThemeColors } from '../../hooks/useTheme'
@@ -228,6 +228,31 @@ export default function PostDetailScreen({ route, navigation }) {
     })
   }
 
+  const handleUnarchivePress = () => {
+    setMenuOpen(false)
+    if (!currentUid || !isOwnPost) return
+
+    setConfirmation({
+      title: 'Unarchive Post',
+      message: 'Restore this post to your feed and profile grid?',
+      confirmLabel: 'Unarchive',
+      destructive: false,
+      iconName: 'arrow-undo-outline',
+      onConfirm: async () => {
+        setActionLoading(true)
+        try {
+          await unarchivePost(post.id, currentUid)
+          setConfirmation(null)
+          navigation.goBack()
+        } catch (error) {
+          console.error('Failed to unarchive post:', error)
+        } finally {
+          setActionLoading(false)
+        }
+      },
+    })
+  }
+
   const handleDeletePress = () => {
     setMenuOpen(false)
     if (!currentUid || !isOwnPost) return
@@ -321,10 +346,17 @@ export default function PostDetailScreen({ route, navigation }) {
       <Modal transparent visible={isMenuOpen} animationType="none" statusBarTranslucent onRequestClose={() => setMenuOpen(false)}>
         <Pressable style={styles.dropdownLayer} onPress={() => setMenuOpen(false)}>
           <Animated.View style={[styles.dropdownMenu, menuAnimatedStyle]}>
-            <TouchableOpacity style={styles.dropdownItem} onPress={handleArchivePress}>
-              <Ionicons name="archive-outline" size={18} color={colors.text} />
-              <Text style={styles.dropdownText}>Archive</Text>
-            </TouchableOpacity>
+            {post.archived ? (
+              <TouchableOpacity style={styles.dropdownItem} onPress={handleUnarchivePress}>
+                <Ionicons name="arrow-undo-outline" size={18} color={colors.text} />
+                <Text style={styles.dropdownText}>Unarchive</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.dropdownItem} onPress={handleArchivePress}>
+                <Ionicons name="archive-outline" size={18} color={colors.text} />
+                <Text style={styles.dropdownText}>Archive</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={styles.dropdownItem} onPress={handleDeletePress}>
               <Ionicons name="trash-outline" size={18} color={colors.danger} />

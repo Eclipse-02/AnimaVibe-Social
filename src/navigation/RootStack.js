@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import AuthStack from './AuthStack'
 import MainTabs from './MainTabs'
 import StoryScreen from '../screens/story/StoryScreen'
+import ArchivedStoryScreen from '../screens/story/ArchivedStoryScreen'
 import CommentsScreen from '../screens/comments/CommentsScreen'
 import ProfileScreen from '../screens/profile/ProfileScreen'
 import EditProfileScreen from '../screens/profile/EditProfileScreen'
@@ -42,6 +43,11 @@ export default function RootStack() {
           <Stack.Screen
             name="StoryScreen"
             component={StoryScreen}
+            options={{ animation: 'fade' }}
+          />
+          <Stack.Screen
+            name="ArchivedStoryScreen"
+            component={ArchivedStoryScreen}
             options={{ animation: 'fade' }}
           />
           <Stack.Screen name="Comments" component={CommentsScreen} />

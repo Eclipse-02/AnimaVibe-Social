@@ -3,7 +3,7 @@ import { StyleSheet, View, Text, FlatList, TouchableOpacity, ActivityIndicator, 
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getFeedPosts } from '../../lib/firestore/posts';
 import { getArchivedStories } from '../../lib/firestore/stories';
@@ -70,34 +70,37 @@ function ArchivedPostsTab({ navigation }) {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
 
-    async function loadArchivedPosts() {
-      if (!user?.uid) {
-        if (isMounted) setLoading(false);
-        return;
+      async function loadArchivedPosts() {
+        if (!user?.uid) {
+          if (isMounted) setLoading(false);
+          return;
+        }
+
+        if (isMounted) setLoading(true);
+        try {
+          const response = await getFeedPosts({
+            interactionType: 'archived',
+            userId: user.uid,
+            pageSize: 60,
+          });
+          if (isMounted) setPosts(response.posts);
+        } catch (error) {
+          console.error('Failed to load archived posts:', error);
+        } finally {
+          if (isMounted) setLoading(false);
+        }
       }
 
-      try {
-        const response = await getFeedPosts({
-          interactionType: 'archived',
-          userId: user.uid,
-          pageSize: 60,
-        });
-        if (isMounted) setPosts(response.posts);
-      } catch (error) {
-        console.error('Failed to load archived posts:', error);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    loadArchivedPosts();
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.uid]);
+      loadArchivedPosts();
+      return () => {
+        isMounted = false;
+      };
+    }, [user?.uid])
+  );
 
   return (
     <MediaGrid
@@ -113,35 +116,38 @@ function ArchivedPostsTab({ navigation }) {
 /**
  * Displays manually archived or expired stories for the signed-in user.
  */
-function ArchivedStoriesTab() {
+function ArchivedStoriesTab({ navigation }) {
   const user = useAuthStore((state) => state.user);
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
 
-    async function loadArchivedStories() {
-      if (!user?.uid) {
-        if (isMounted) setLoading(false);
-        return;
+      async function loadArchivedStories() {
+        if (!user?.uid) {
+          if (isMounted) setLoading(false);
+          return;
+        }
+
+        if (isMounted) setLoading(true);
+        try {
+          const archivedStories = await getArchivedStories({ userId: user.uid });
+          if (isMounted) setStories(archivedStories);
+        } catch (error) {
+          console.error('Failed to load archived stories:', error);
+        } finally {
+          if (isMounted) setLoading(false);
+        }
       }
 
-      try {
-        const archivedStories = await getArchivedStories({ userId: user.uid });
-        if (isMounted) setStories(archivedStories);
-      } catch (error) {
-        console.error('Failed to load archived stories:', error);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    loadArchivedStories();
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.uid]);
+      loadArchivedStories();
+      return () => {
+        isMounted = false;
+      };
+    }, [user?.uid])
+  );
 
   return (
     <MediaGrid
@@ -150,6 +156,13 @@ function ArchivedStoriesTab() {
       emptyIcon="time-outline"
       emptyLabel="No archived stories yet"
       mediaField="mediaUrl"
+      onPressItem={(item) => {
+        const startIndex = stories.findIndex((s) => s.id === item.id);
+        navigation.navigate('ArchivedStoryScreen', {
+          stories,
+          startIndex: startIndex >= 0 ? startIndex : 0,
+        });
+      }}
     />
   );
 }
@@ -251,7 +264,9 @@ export default function PostGridScreen() {
           <ArchiveTabs.Screen name="ArchivedPosts" options={{ title: 'Posts' }}>
             {(tabProps) => <ArchivedPostsTab {...tabProps} />}
           </ArchiveTabs.Screen>
-          <ArchiveTabs.Screen name="ArchivedStories" component={ArchivedStoriesTab} options={{ title: 'Stories' }} />
+          <ArchiveTabs.Screen name="ArchivedStories" options={{ title: 'Stories' }}>
+            {(tabProps) => <ArchivedStoriesTab {...tabProps} />}
+          </ArchiveTabs.Screen>
         </ArchiveTabs.Navigator>
       ) : loading ? (
         <View style={styles.centerContainer}>
