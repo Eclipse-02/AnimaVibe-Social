@@ -189,12 +189,13 @@ function ProfileScreen() {
       style={styles.gridItem}
       onPress={() => {
         const parent = navigation.getParent();
-        if (parent) {
-          parent.navigate('FeedTab', {
-            screen: 'PostDetail',
-            params: { post: item }
-          });
+        const root = parent?.getParent?.();
+        if (root) {
+          root.navigate('PostDetail', { post: item });
+          return;
         }
+
+        navigation.navigate('PostDetail', { post: item });
       }}
     >
       <Image source={{ uri: item.imageUrl }} style={styles.gridImage} cachePolicy="disk" />

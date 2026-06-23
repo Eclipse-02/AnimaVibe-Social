@@ -17,8 +17,8 @@ export default function FeedStack() {
         name="PostDetail"
         component={PostDetailScreen}
         options={{
-          animation: 'fade_from_bottom',
-          animationDuration: 320,
+          animation: 'fade',
+          animationDuration: 220,
         }}
       />
       <Stack.Screen

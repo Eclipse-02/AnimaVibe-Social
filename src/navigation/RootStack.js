@@ -27,7 +27,7 @@ export default function RootStack() {
   if (!isHydrated) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ffffff" />
+        <ActivityIndicator size="large" color={colors.text} />
       </View>
     )
   }
@@ -46,7 +46,11 @@ export default function RootStack() {
           />
           <Stack.Screen name="Comments" component={CommentsScreen} />
           <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
-          <Stack.Screen name="PostDetail" component={PostDetailScreen} />
+          <Stack.Screen
+            name="PostDetail"
+            component={PostDetailScreen}
+            options={{ animation: 'fade', animationDuration: 220 }}
+          />
           <Stack.Screen name="EditProfile" component={EditProfileScreen} />
           <Stack.Screen name="PostGrid" component={PostGridScreen} />
           <Stack.Screen name="CreateStoryScreen" component={CreateStoryScreen} options={{ presentation: 'modal' }} />

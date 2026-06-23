@@ -39,6 +39,18 @@ export default function DiscoveryScreen() {
   const colors = useThemeColors();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
 
+  const openRootPostDetail = (post) => {
+    const tabNavigator = navigation.getParent?.();
+    const rootNavigator = tabNavigator?.getParent?.();
+
+    if (rootNavigator) {
+      rootNavigator.navigate('PostDetail', { post });
+      return;
+    }
+
+    navigation.navigate('PostDetail', { post });
+  };
+
   useEffect(() => {
     if (route.params?.searchQuery) {
       setIsSearching(true);
@@ -213,7 +225,7 @@ export default function DiscoveryScreen() {
       return (
         <TouchableOpacity
           style={styles.postGridItem}
-          onPress={() => navigation.navigate('PostDetail', { post: item })}
+          onPress={() => openRootPostDetail(item)}
         >
           <Image source={{ uri: item.mediaURL || item.image }} style={styles.postGridImage} contentFit="cover" />
         </TouchableOpacity>
@@ -229,7 +241,7 @@ export default function DiscoveryScreen() {
 
       <View style={styles.headerRow}>
         <View style={[styles.searchContainer, isSearching && { flex: 1, marginRight: 0 }]}>
-          <Ionicons name="search" size={20} color="#888" />
+          <Ionicons name="search" size={20} color={colors.textMuted} />
           {isSearching ? (
             <TextInput
               style={styles.searchInputField}
@@ -332,7 +344,7 @@ export default function DiscoveryScreen() {
                     { height: isTall ? 250 : 150 }
                   ]}
                   activeOpacity={0.9}
-                  onPress={() => navigation.navigate('PostDetail', { post: item })}
+                  onPress={() => openRootPostDetail(item)}
                 >
                   <Image
                     source={{ uri: item.mediaURL || item.image }}

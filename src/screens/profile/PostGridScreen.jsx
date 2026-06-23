@@ -105,7 +105,7 @@ function ArchivedPostsTab({ navigation }) {
       loading={loading}
       emptyIcon="archive-outline"
       emptyLabel="No archived posts yet"
-      onPressItem={(post) => navigation.push('PostDetail', { post })}
+      onPressItem={(post) => navigation.navigate('PostDetail', { post })}
     />
   );
 }
@@ -219,7 +219,7 @@ export default function PostGridScreen() {
       activeOpacity={0.9}
       style={styles.gridItem}
       onPress={() => {
-        navigation.push('PostDetail', { post: item });
+        navigation.navigate('PostDetail', { post: item });
       }}
     >
       <Image source={{ uri: item.imageUrl }} style={styles.gridImage} cachePolicy="disk" />

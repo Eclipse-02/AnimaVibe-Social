@@ -50,7 +50,7 @@ export default function PostCard({ post, onActionToast }) {
     menuProgress.value = withTiming(isMenuOpen ? 1 : 0, { duration: 160 })
   }, [isMenuOpen, menuProgress])
 
-  const triggerLikeAnimation = () => {
+  function triggerLikeAnimation() {
     scaleValue.value = 0
     scaleValue.value = withSequence(
       withSpring(1, { damping: 9, stiffness: 200 }),
@@ -62,6 +62,18 @@ export default function PostCard({ post, onActionToast }) {
     }
   }
 
+  function openPostDetail() {
+    const tabNavigator = navigation.getParent?.()
+    const rootNavigator = tabNavigator?.getParent?.()
+
+    if (rootNavigator) {
+      rootNavigator.navigate('PostDetail', { post })
+      return
+    }
+
+    navigation.navigate('PostDetail', { post })
+  }
+
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .onStart(() => {
@@ -71,7 +83,7 @@ export default function PostCard({ post, onActionToast }) {
   const singleTap = Gesture.Tap()
     .numberOfTaps(1)
     .onStart(() => {
-      runOnJS(navigation.navigate)('PostDetail', { post })
+      runOnJS(openPostDetail)()
     })
 
   const imageTap = Gesture.Exclusive(doubleTap, singleTap)
