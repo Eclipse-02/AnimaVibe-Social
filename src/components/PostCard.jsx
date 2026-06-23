@@ -1,15 +1,20 @@
 import React, { useState, useMemo } from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, Share } from 'react-native'
+import { Modal, Pressable, StyleSheet, View, Text, TouchableOpacity, Share } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withSequence, withDelay, withTiming, runOnJS } from 'react-native-reanimated'
 import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { useNavigation } from '@react-navigation/native'
-import { toggleLikePost, toggleBookmarkPost } from '../lib/firestore/posts'
+import { archivePost, deletePost, toggleLikePost, toggleBookmarkPost } from '../lib/firestore/posts'
 import { useAuthStore } from '../store/authStore'
 import { useThemeColors } from '../hooks/useTheme'
+import ConfirmationModal from './ui/ConfirmationModal'
 
-export default function PostCard({ post }) {
+/**
+ * Renders one feed post and owner actions.
+ * @param {{ post: Object, onActionToast?: Function }} props
+ */
+export default function PostCard({ post, onActionToast }) {
   const storeUser = useAuthStore((state) => state.user)
   const userProfile = useAuthStore((state) => state.userProfile)
   const currentUid = storeUser?.uid
@@ -26,10 +31,24 @@ export default function PostCard({ post }) {
   const [liked, setLiked] = useState(initialLiked)
   const [likeCount, setLikeCount] = useState(post.likesCount ?? 0)
   const [bookmarked, setBookmarked] = useState(initialBookmarked)
+  const [isMenuOpen, setMenuOpen] = useState(false)
+  const [menuAnchor, setMenuAnchor] = useState(null)
+  const [confirmation, setConfirmation] = useState(null)
+  const [isActionLoading, setActionLoading] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
+  const [isToastVisible, setToastVisible] = useState(false)
+  const menuButtonRef = React.useRef(null)
   const scaleValue = useSharedValue(0)
+  const menuProgress = useSharedValue(0)
+  const toastProgress = useSharedValue(0)
   const navigation = useNavigation()
   const colors = useThemeColors()
   const styles = useMemo(() => getStyles(colors), [colors])
+  const isOwnPost = post.userId === currentUid
+
+  React.useEffect(() => {
+    menuProgress.value = withTiming(isMenuOpen ? 1 : 0, { duration: 160 })
+  }, [isMenuOpen, menuProgress])
 
   const triggerLikeAnimation = () => {
     scaleValue.value = 0
@@ -62,6 +81,19 @@ export default function PostCard({ post }) {
       transform: [{ scale: scaleValue.value }]
     }
   })
+
+  const menuAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+    transform: [
+      { translateY: (1 - menuProgress.value) * -8 },
+      { scale: 0.96 + (menuProgress.value * 0.04) },
+    ],
+  }))
+
+  const toastAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: toastProgress.value,
+    transform: [{ translateY: (1 - toastProgress.value) * 18 }],
+  }))
 
   const handleLikePress = async () => {
     if (!currentUid) return
@@ -96,7 +128,19 @@ export default function PostCard({ post }) {
     }
   }
 
+  const openMenu = () => {
+    menuButtonRef.current?.measureInWindow((x, y, width, height) => {
+      setMenuAnchor({ x, y, width, height })
+      setMenuOpen(true)
+    })
+  }
+
+  const closeMenu = () => {
+    setMenuOpen(false)
+  }
+
   const onShare = async () => {
+    setMenuOpen(false)
     try {
       await Share.share({
         message: `Check out this post by ${post.username}: ${post.caption}`,
@@ -104,6 +148,74 @@ export default function PostCard({ post }) {
     } catch (error) {
       console.log(error.message)
     }
+  }
+
+  const showToast = (message) => {
+    if (onActionToast) {
+      onActionToast(message)
+      return
+    }
+
+    setToastMessage(message)
+    setToastVisible(true)
+    toastProgress.value = 0
+    toastProgress.value = withTiming(1, { duration: 220 })
+
+    setTimeout(() => {
+      toastProgress.value = withTiming(0, { duration: 180 }, (finished) => {
+        if (finished) runOnJS(setToastVisible)(false)
+      })
+    }, 1800)
+  }
+
+  const handleArchivePress = () => {
+    setMenuOpen(false)
+    if (!currentUid || !isOwnPost) return
+
+    setConfirmation({
+      title: 'Archive Post',
+      message: 'Remove this post from your feed and profile grid? You can still find it in Archive.',
+      confirmLabel: 'Archive',
+      destructive: false,
+      iconName: 'archive-outline',
+      onConfirm: async () => {
+        setActionLoading(true)
+        try {
+          await archivePost(post.id, currentUid)
+          setConfirmation(null)
+          showToast('Post archived')
+        } catch (error) {
+          showToast(error.message)
+        } finally {
+          setActionLoading(false)
+        }
+      },
+    })
+  }
+
+  const handleDeletePress = () => {
+    setMenuOpen(false)
+    if (!currentUid || !isOwnPost) return
+
+    setConfirmation({
+      title: 'Delete Post',
+      message: 'This post will be permanently deleted. This action cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      iconName: 'trash-outline',
+      onConfirm: async () => {
+        setActionLoading(true)
+        try {
+          await deletePost(post.id, currentUid)
+          setConfirmation(null)
+          showToast('Post deleted')
+        } catch (error) {
+          showToast(error.message)
+        } finally {
+          setActionLoading(false)
+        }
+      },
+    })
   }
 
   const displayLikeCount = likeCount >= 1000
@@ -129,7 +241,7 @@ export default function PostCard({ post }) {
         return (
           <Text
             key={index}
-            style={{ color: '#A855F7' }}
+            style={{ color: colors.brand }}
             onPress={() => {
               navigation.navigate('MainApp', {
                 screen: 'Discovery',
@@ -159,10 +271,48 @@ export default function PostCard({ post }) {
             <Text style={styles.time}>{post.timeAgo || ''}</Text>
           </View>
         </TouchableOpacity>
-        <TouchableOpacity>
+        <TouchableOpacity
+          ref={menuButtonRef}
+          style={styles.menuButton}
+          onPress={isMenuOpen ? closeMenu : openMenu}
+        >
           <Ionicons name="ellipsis-vertical" size={20} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
+
+      <Modal transparent visible={isMenuOpen} animationType="none" statusBarTranslucent onRequestClose={closeMenu}>
+        <Pressable style={styles.dropdownDismissLayer} onPress={closeMenu}>
+          <Animated.View
+            style={[
+              styles.dropdownMenu,
+              menuAnchor && {
+                top: menuAnchor.y + menuAnchor.height + 4,
+                right: Math.max(16, 16),
+              },
+              menuAnimatedStyle,
+            ]}
+          >
+            <TouchableOpacity style={styles.dropdownItem} onPress={onShare}>
+              <Ionicons name="share-social-outline" size={18} color={colors.text} />
+              <Text style={styles.dropdownText}>Share</Text>
+            </TouchableOpacity>
+
+            {isOwnPost && (
+              <>
+                <TouchableOpacity style={styles.dropdownItem} onPress={handleArchivePress}>
+                  <Ionicons name="archive-outline" size={18} color={colors.text} />
+                  <Text style={styles.dropdownText}>Archive</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.dropdownItem} onPress={handleDeletePress}>
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  <Text style={[styles.dropdownText, styles.dropdownDangerText]}>Delete</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Animated.View>
+        </Pressable>
+      </Modal>
 
       <GestureDetector gesture={imageTap}>
         <View style={styles.imageWrapper}>
@@ -174,7 +324,7 @@ export default function PostCard({ post }) {
             contentFit="cover"
           />
           <Animated.View style={[styles.likeAnimation, animatedStyle]}>
-            <Ionicons name="heart" size={100} color="#ff3b30" />
+            <Ionicons name="heart" size={100} color={colors.danger} />
           </Animated.View>
         </View>
       </GestureDetector>
@@ -213,14 +363,69 @@ export default function PostCard({ post }) {
           {renderCaptionWithHashtags(post.caption)}
         </Text>
       </View>
+
+      <Modal transparent visible={isToastVisible} animationType="none" statusBarTranslucent>
+        <View pointerEvents="none" style={styles.toastOverlay}>
+          <Animated.View style={[styles.toast, toastAnimatedStyle]}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      <ConfirmationModal
+        visible={Boolean(confirmation)}
+        title={confirmation?.title || ''}
+        message={confirmation?.message || ''}
+        confirmLabel={confirmation?.confirmLabel}
+        destructive={confirmation?.destructive}
+        iconName={confirmation?.iconName}
+        isLoading={isActionLoading}
+        onCancel={() => {
+          if (!isActionLoading) setConfirmation(null)
+        }}
+        onConfirm={() => confirmation?.onConfirm?.()}
+      />
     </View>
   )
 }
 
 const getStyles = (colors) => StyleSheet.create({
   container: { backgroundColor: colors.background, marginBottom: 24 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, position: 'relative', zIndex: 4 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  menuButton: { padding: 6, marginRight: -6 },
+  dropdownDismissLayer: {
+    flex: 1,
+    marginTop: 24
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    minWidth: 150,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    shadowColor: colors.background,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+    zIndex: 20,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 10,
+  },
+  dropdownDangerText: { color: colors.danger },
   avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceHigh },
   headerInfo: { marginLeft: 12 },
   username: { color: colors.text, fontWeight: 'bold', fontSize: 14 },
@@ -234,5 +439,29 @@ const getStyles = (colors) => StyleSheet.create({
   actionText: { color: colors.text, fontSize: 14, fontWeight: '600', marginLeft: 8 },
   captionContainer: { paddingHorizontal: 16, paddingBottom: 8 },
   caption: { color: colors.text, fontSize: 13, lineHeight: 20 },
-  boldUser: { fontWeight: 'bold' }
+  boldUser: { fontWeight: 'bold' },
+  toastOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 96,
+  },
+  toast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceHigh,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  toastText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8,
+  }
 })

@@ -39,6 +39,11 @@ export default function ProfileDrawerContent({ navigation }) {
     navigation.navigate('PostGrid', { type: 'bookmarks', title: 'Bookmarks' });
   };
 
+  const handleArchive = () => {
+    navigation.closeDrawer();
+    navigation.navigate('PostGrid', { type: 'archive', title: 'Archive' });
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top + 16 }]}>
       <Text style={styles.headerTitle}>Settings</Text>
@@ -52,6 +57,11 @@ export default function ProfileDrawerContent({ navigation }) {
         <TouchableOpacity style={styles.menuItem} onPress={handleBookmarks}>
           <Ionicons name="bookmark-outline" size={22} color={colors.text} />
           <Text style={styles.menuItemText}>Bookmarks</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={handleArchive}>
+          <Ionicons name="archive-outline" size={22} color={colors.text} />
+          <Text style={styles.menuItemText}>Archive</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.menuItem} onPress={handleEditProfile}>

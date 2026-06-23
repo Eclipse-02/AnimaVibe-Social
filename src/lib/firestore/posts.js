@@ -135,6 +135,10 @@ function mapFeedDoc(postDoc) {
   }
 }
 
+function isPostVisible(postDoc) {
+  return postDoc.data().createdAt !== null && postDoc.data().archived !== true
+}
+
 /**
  * Finds posts by caption prefix using an indexed Firestore query.
  * @param {string} searchTerm Caption prefix.
@@ -195,7 +199,7 @@ export function subscribeToFeedPosts(onData, onError = console.error) {
         }
 
         const posts = snapshot.docs
-          .filter((postDoc) => postDoc.data().createdAt !== null)
+          .filter(isPostVisible)
           .map(mapFeedDoc)
 
         onData(posts, {
@@ -269,6 +273,9 @@ export async function createPost(post = {}) {
       commentsCount: 0,
       likedBy: [],
       bookmarkedBy: [],
+      archived: false,
+      archivedAt: null,
+      archivedBy: null,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }
@@ -315,17 +322,23 @@ export async function getFeedPosts(options = {}) {
     const constraints = [orderBy('createdAt', 'desc'), limit(pageSize)]
 
     if (options.interactionType && options.userId) {
-      const field = options.interactionType === 'favorites' ? 'likedBy' : 'bookmarkedBy'
-      constraints.unshift(where(field, 'array-contains', options.userId))
+      if (options.interactionType === 'archived') {
+        constraints.unshift(where('archived', '==', true), where('userId', '==', options.userId))
+      } else {
+        const field = options.interactionType === 'favorites' ? 'likedBy' : 'bookmarkedBy'
+        constraints.unshift(where(field, 'array-contains', options.userId))
+      }
     }
 
     if (options.lastDoc) {
-      constraints.splice(options.interactionType ? 2 : 1, 0, startAfter(options.lastDoc))
+      constraints.splice(constraints.length - 1, 0, startAfter(options.lastDoc))
     }
 
     const feedQuery = query(collection(db, 'posts'), ...constraints)
     const snapshot = await getDocs(feedQuery)
-    const posts = snapshot.docs.map(mapPostDoc)
+    const posts = snapshot.docs
+      .map(mapPostDoc)
+      .filter((post) => options.interactionType === 'archived' || post.archived !== true)
     const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null
 
     return {
@@ -335,6 +348,93 @@ export async function getFeedPosts(options = {}) {
     }
   } catch (error) {
     throw new Error(`Failed to get feed posts: ${error.message}`)
+  }
+}
+
+/**
+ * Marks one of the current user's posts as archived.
+ * @param {string} postId Firestore post id.
+ * @param {string} userId Firebase Auth user id that owns the post.
+ * @returns {Promise<{archived: boolean}>} Archive status.
+ */
+export async function archivePost(postId, userId) {
+  try {
+    if (!postId || !userId) {
+      throw new Error('Post id and user id are required to archive a post.')
+    }
+
+    const postRef = doc(db, 'posts', postId)
+
+    await runTransaction(db, async (transaction) => {
+      const postSnap = await transaction.get(postRef)
+
+      if (!postSnap.exists()) {
+        throw new Error('Post was not found.')
+      }
+
+      if (postSnap.data().userId !== userId) {
+        throw new Error('Only the owner can archive this post.')
+      }
+
+      transaction.update(postRef, {
+        archived: true,
+        archivedAt: serverTimestamp(),
+        archivedBy: userId,
+        updatedAt: serverTimestamp(),
+      })
+    })
+
+    return { archived: true }
+  } catch (error) {
+    throw new Error(`Failed to archive post: ${error.message}`)
+  }
+}
+
+/**
+ * Deletes one of the current user's posts and removes its uploaded image when possible.
+ * @param {string} postId Firestore post id.
+ * @param {string} userId Firebase Auth user id that owns the post.
+ * @returns {Promise<{deleted: boolean}>} Delete status.
+ */
+export async function deletePost(postId, userId) {
+  try {
+    if (!postId || !userId) {
+      throw new Error('Post id and user id are required to delete a post.')
+    }
+
+    const postRef = doc(db, 'posts', postId)
+    const userRef = doc(db, 'users', userId)
+    let imagePath = null
+
+    await runTransaction(db, async (transaction) => {
+      const postSnap = await transaction.get(postRef)
+
+      if (!postSnap.exists()) {
+        throw new Error('Post was not found.')
+      }
+
+      const postData = postSnap.data()
+      if (postData.userId !== userId) {
+        throw new Error('Only the owner can delete this post.')
+      }
+
+      imagePath = postData.imagePath || null
+      transaction.delete(postRef)
+      transaction.update(userRef, {
+        postCount: increment(-1),
+        updatedAt: serverTimestamp(),
+      })
+    })
+
+    if (imagePath) {
+      await deleteObject(ref(storage, imagePath)).catch((error) => {
+        console.warn('Failed to delete post image from storage:', error)
+      })
+    }
+
+    return { deleted: true }
+  } catch (error) {
+    throw new Error(`Failed to delete post: ${error.message}`)
   }
 }
 

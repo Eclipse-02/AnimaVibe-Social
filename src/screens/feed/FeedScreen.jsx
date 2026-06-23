@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, FlatList, SafeAreaView, Platform, StatusBar, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import PostCard from '../../components/PostCard';
 import { subscribeToActiveStories } from '../../lib/firestore/stories';
 import { subscribeToFeedPosts } from '../../lib/firestore/posts';
@@ -18,6 +18,27 @@ export default function FeedScreen({ navigation }) {
   const styles = React.useMemo(() => getStyles(colors), [colors]);
   const [posts, setPosts] = useState([]);
   const [stories, setStories] = useState([]);
+  const [toastMessage, setToastMessage] = useState('');
+  const [isToastVisible, setToastVisible] = useState(false);
+  const toastProgress = useSharedValue(0);
+
+  const toastAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: toastProgress.value,
+    transform: [{ translateY: (1 - toastProgress.value) * 18 }],
+  }));
+
+  const showActionToast = (message) => {
+    setToastMessage(message);
+    setToastVisible(true);
+    toastProgress.value = 0;
+    toastProgress.value = withTiming(1, { duration: 220 });
+
+    setTimeout(() => {
+      toastProgress.value = withTiming(0, { duration: 180 }, (finished) => {
+        if (finished) runOnJS(setToastVisible)(false);
+      });
+    }, 1800);
+  };
 
   useEffect(() => {
     const unsubscribePosts = subscribeToFeedPosts(
@@ -63,7 +84,7 @@ export default function FeedScreen({ navigation }) {
       if (isGradient) {
         return (
           <LinearGradient
-            colors={['#833ab4', '#fd1d1d', '#fcb045']}
+            colors={[colors.brand, colors.danger, colors.warning]}
             style={styles.storyRingGradient}
             start={{ x: 0, y: 1 }}
             end={{ x: 1, y: 0 }}
@@ -167,7 +188,7 @@ export default function FeedScreen({ navigation }) {
           data={posts}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <PostCard post={item} />
+            <PostCard post={item} onActionToast={showActionToast} />
           )}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={() => (
@@ -217,6 +238,15 @@ export default function FeedScreen({ navigation }) {
             </View>
           )}
         />
+
+        <Modal transparent visible={isToastVisible} animationType="none" statusBarTranslucent>
+          <View pointerEvents="none" style={styles.toastOverlay}>
+            <Animated.View style={[styles.toast, toastAnimatedStyle]}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+              <Text style={styles.toastText}>{toastMessage}</Text>
+            </Animated.View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </GestureDetector>
   );
@@ -320,5 +350,29 @@ const getStyles = (colors) => StyleSheet.create({
     fontSize: 11,
     marginTop: 8,
     textAlign: 'center'
+  },
+  toastOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 96
+  },
+  toast: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    maxWidth: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceHigh,
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  toastText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8
   }
 });

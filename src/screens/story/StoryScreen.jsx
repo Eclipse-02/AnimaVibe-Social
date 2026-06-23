@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Dimensions, StatusBar, ActivityIndicator, Alert } from 'react-native';
+import { Modal, Pressable, Share, StyleSheet, View, Text, TouchableOpacity, Dimensions, StatusBar, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../../config/firebase';
@@ -7,24 +7,34 @@ import { deleteDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import Animated, { useSharedValue, withTiming, Easing, runOnJS, useAnimatedStyle, withSpring, cancelAnimation } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import PagerView from 'react-native-pager-view';
-import { getActiveStories, toggleLikeStory } from '../../lib/firestore/stories';
+import { archiveStory, getActiveStories, toggleLikeStory } from '../../lib/firestore/stories';
 import { getTimeAgo } from '../../lib/firestore/posts';
 import { useAuthStore } from '../../store/authStore';
 import StoryCommentsModal from '../../components/StoryCommentsModal';
+import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import { useThemeColors } from '../../hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 
+/**
+ * Renders one user's story deck and pauses progress while overlays are open.
+ * @param {{ stories: Object[], isActive: boolean, navigation: Object, onNextUser: Function, onPrevUser: Function, onClose: Function }} props
+ */
 function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, onPrevUser, onClose }) {
   const [stories, setStories] = useState(initialStories);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isCommentsVisible, setCommentsVisible] = useState(false);
+  const [isMenuOpen, setMenuOpen] = useState(false);
+  const [confirmation, setConfirmation] = useState(null);
+  const [isActionLoading, setActionLoading] = useState(false);
   const progress = useSharedValue(0);
   const captionScale = useSharedValue(0);
+  const menuProgress = useSharedValue(0);
   const user = useAuthStore((state) => state.user);
   const userProfile = useAuthStore((state) => state.userProfile);
   const colors = useThemeColors();
   const styles = React.useMemo(() => getStyles(colors), [colors]);
+  const isProgressPaused = isCommentsVisible || isMenuOpen || Boolean(confirmation);
 
   useEffect(() => {
     if (!isActive) {
@@ -66,7 +76,7 @@ function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, 
       return;
     }
 
-    if (isCommentsVisible) {
+    if (isProgressPaused) {
       cancelAnimation(progress);
     } else {
       const remainingTime = 5000 * (1 - progress.value);
@@ -74,7 +84,11 @@ function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, 
         if (finished) runOnJS(handleNext)();
       });
     }
-  }, [isCommentsVisible, currentIndex, isActive, stories]);
+  }, [isProgressPaused, currentIndex, isActive, stories]);
+
+  useEffect(() => {
+    menuProgress.value = withTiming(isMenuOpen ? 1 : 0, { duration: 160 });
+  }, [isMenuOpen]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -93,29 +107,74 @@ function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, 
     }
   };
 
-  const handleDelete = async (storyId) => {
+  const handleShare = async () => {
+    setMenuOpen(false);
     try {
-      await deleteDoc(doc(db, 'stories', storyId));
-      Alert.alert("Success", "Story successfully removed");
-      onClose();
-    } catch (e) { Alert.alert("Error", "Failed to remove story"); }
+      await Share.share({
+        message: `Check out ${currentStory.username}'s story on AnimaVibe.`,
+      });
+    } catch (error) {
+      console.error('Failed to share story:', error);
+    }
   };
 
-  const handleArchive = async (storyId) => {
-    try {
-      await updateDoc(doc(db, 'stories', storyId), { archived: true });
-      Alert.alert("Success", "Story successfully archived");
-      onClose();
-    } catch (e) { Alert.alert("Error", "Failed to archive story"); }
+  const handleDelete = (storyId) => {
+    setMenuOpen(false);
+    if (!user?.uid) return;
+
+    setConfirmation({
+      title: 'Delete Story',
+      message: 'This story will be permanently deleted. This action cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      iconName: 'trash-outline',
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await deleteDoc(doc(db, 'stories', storyId));
+          setConfirmation(null);
+          onClose();
+        } catch (e) {
+          console.error('Failed to remove story:', e);
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
-  const showOptions = (storyId) => {
-    Alert.alert("Story Options", "Select action:", [
-      { text: "Remove Story", style: "destructive", onPress: () => handleDelete(storyId) },
-      { text: "Archive Story", onPress: () => handleArchive(storyId) },
-      { text: "Cancel", style: "cancel" }
-    ]);
+  const handleArchive = (storyId) => {
+    setMenuOpen(false);
+    if (!user?.uid) return;
+
+    setConfirmation({
+      title: 'Archive Story',
+      message: 'Move this story to your archive before it expires?',
+      confirmLabel: 'Archive',
+      destructive: false,
+      iconName: 'archive-outline',
+      onConfirm: async () => {
+        setActionLoading(true);
+        try {
+          await archiveStory(storyId, user.uid);
+          setConfirmation(null);
+          onClose();
+        } catch (e) {
+          console.error('Failed to archive story:', e);
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
+
+  const menuAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: menuProgress.value,
+    transform: [
+      { translateY: (1 - menuProgress.value) * -8 },
+      { scale: 0.96 + (menuProgress.value * 0.04) },
+    ],
+  }));
 
   const handleLike = async () => {
     if (!user || stories.length === 0) return;
@@ -222,12 +281,37 @@ function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, 
             )}
             <Text style={styles.username}>{currentStory.username}</Text>
             <Text style={styles.timeAgo}>{getTimeAgo(currentStory.createdAt)}</Text>
-            {user && currentStory.userId === user.uid && (
-              <TouchableOpacity onPress={() => showOptions(currentStory.id)} style={styles.menuBtn}>
-                <Ionicons name="ellipsis-horizontal" size={28} color={colors.text} />
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity onPress={() => setMenuOpen(true)} style={styles.menuBtn}>
+              <Ionicons name="ellipsis-horizontal" size={28} color={colors.text} />
+            </TouchableOpacity>
           </View>
+
+          <Modal transparent visible={isMenuOpen} animationType="none" statusBarTranslucent onRequestClose={() => setMenuOpen(false)}>
+            <View style={styles.dropdownLayer}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenuOpen(false)} />
+              <Animated.View style={[styles.dropdownMenu, menuAnimatedStyle]}>
+                <TouchableOpacity style={styles.dropdownItem} onPress={handleShare}>
+                  <Ionicons name="share-social-outline" size={18} color={colors.text} />
+                  <Text style={styles.dropdownText}>Share</Text>
+                </TouchableOpacity>
+
+                {user && currentStory.userId === user.uid && (
+                  <>
+                    <TouchableOpacity style={styles.dropdownItem} onPress={() => handleArchive(currentStory.id)}>
+                      <Ionicons name="archive-outline" size={18} color={colors.text} />
+                      <Text style={styles.dropdownText}>Archive</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.dropdownItem} onPress={() => handleDelete(currentStory.id)}>
+                      <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      <Text style={[styles.dropdownText, styles.dropdownDangerText]}>Delete</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </Animated.View>
+            </View>
+          </Modal>
+
           <View style={styles.footerContainer}>
             {currentStory.caption ? (
               <Animated.View style={[styles.captionBubbleContainer, captionStyle]}>
@@ -245,21 +329,22 @@ function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, 
             ) : null}
 
             <View style={styles.footerRow}>
-              <TouchableOpacity style={styles.commentInputBox} onPress={() => setCommentsVisible(true)}>
-                <Text style={styles.commentPlaceholder}>Send message...</Text>
-                <Ionicons name="send" size={20} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.likeBtn} onPress={handleLike}>
-                <Ionicons
-                  name={currentStory.likedBy?.includes(user?.uid) ? "heart" : "heart-outline"}
-                  size={28}
-                  color={currentStory.likedBy?.includes(user?.uid) ? colors.danger : colors.text}
-                />
-              </TouchableOpacity>
+              {user && currentStory.userId === user.uid && (
+                <Text style={styles.viewers}>Viewed by {currentStory.viewers?.length || 0} people</Text>
+              )}
+              <View style={styles.iconRow}>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => setCommentsVisible(true)}>
+                  <Ionicons name="chatbubble-outline" size={28} color={colors.text} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconBtn} onPress={handleLike}>
+                  <Ionicons
+                    name={currentStory.likedBy?.includes(user?.uid) ? "heart" : "heart-outline"}
+                    size={28}
+                    color={currentStory.likedBy?.includes(user?.uid) ? colors.danger : colors.text}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-            {user && currentStory.userId === user.uid && (
-              <Text style={styles.viewers}>Dilihat oleh {currentStory.viewers?.length || 0} orang</Text>
-            )}
           </View>
         </View>
       </View>
@@ -269,6 +354,20 @@ function StoryDeck({ stories: initialStories, isActive, navigation, onNextUser, 
         onClose={() => setCommentsVisible(false)}
         storyId={currentStory.id}
         navigation={navigation}
+      />
+
+      <ConfirmationModal
+        visible={Boolean(confirmation)}
+        title={confirmation?.title || ''}
+        message={confirmation?.message || ''}
+        confirmLabel={confirmation?.confirmLabel}
+        destructive={confirmation?.destructive}
+        iconName={confirmation?.iconName}
+        isLoading={isActionLoading}
+        onCancel={() => {
+          if (!isActionLoading) setConfirmation(null);
+        }}
+        onConfirm={() => confirmation?.onConfirm?.()}
       />
     </View>
   );
@@ -448,6 +547,40 @@ const getStyles = (colors) => StyleSheet.create({
     marginLeft: 'auto',
     marginRight: 15
   },
+  dropdownLayer: {
+    flex: 1,
+    marginTop: 10
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 98,
+    right: 28,
+    minWidth: 150,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    shadowColor: colors.background,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
+  dropdownText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 10
+  },
+  dropdownDangerText: {
+    color: colors.danger
+  },
   closeBtn: {
     marginLeft: 'auto'
   },
@@ -460,32 +593,29 @@ const getStyles = (colors) => StyleSheet.create({
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: 10
   },
-  commentInputBox: {
-    flex: 1,
+  iconRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end'
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
     backgroundColor: colors.surfaceHigh,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 25,
     borderWidth: 1,
     borderColor: colors.border
-  },
-  commentPlaceholder: {
-    color: colors.textSecondary,
-    fontSize: 14
-  },
-  likeBtn: {
-    marginLeft: 16,
-    marginRight: 8
   },
   viewers: {
     color: colors.textSecondary,
     fontSize: 12,
-    marginTop: 8
+    marginTop: 8,
   },
   captionBubbleContainer: {
     flexDirection: 'row',

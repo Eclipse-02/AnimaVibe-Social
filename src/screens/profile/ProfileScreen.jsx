@@ -30,6 +30,10 @@ function mapPostDoc(postDoc) {
   }
 }
 
+function isPublicProfilePost(postDoc) {
+  return postDoc.data().archived !== true
+}
+
 function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -77,7 +81,7 @@ function ProfileScreen() {
     );
 
     const unsubscribePosts = onSnapshot(q, (snapshot) => {
-      const fetchedPosts = snapshot.docs.map(mapPostDoc);
+      const fetchedPosts = snapshot.docs.filter(isPublicProfilePost).map(mapPostDoc);
       setUserPosts(fetchedPosts);
       setLoadingPosts(false);
     }, (error) => {

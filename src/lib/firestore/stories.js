@@ -68,6 +68,16 @@ function mapStoryDoc(storyDoc) {
   }
 }
 
+function isStoryActive(story) {
+  const expirationTime = story.expiresAt?.toMillis?.() || 0
+  return story.archived !== true && expirationTime > Date.now()
+}
+
+function isStoryArchived(story) {
+  const expirationTime = story.expiresAt?.toMillis?.() || 0
+  return story.archived === true || expirationTime <= Date.now()
+}
+
 /**
  * Creates a story that expires after 24 hours by default.
  * @param {Object} story Story payload.
@@ -105,6 +115,9 @@ export async function createStory(story = {}) {
       likedBy: [],
       likesCount: 0,
       commentsCount: 0,
+      archived: false,
+      archivedAt: null,
+      archivedBy: null,
       createdAt: serverTimestamp(),
       expiresAt,
     }
@@ -155,7 +168,7 @@ export async function getActiveStories(options = {}) {
     )
     const snapshot = await getDocs(storiesQuery)
 
-    return snapshot.docs.map(mapStoryDoc)
+    return snapshot.docs.map(mapStoryDoc).filter(isStoryActive)
   } catch (error) {
     throw new Error(`Failed to get active stories: ${error.message}`)
   }
@@ -186,7 +199,7 @@ export function subscribeToActiveStories(callback, onError, options = {}) {
     const now = Date.now()
     const activeStories = latestStories.filter((story) => {
       const expirationTime = story.expiresAt?.toMillis?.() || 0
-      return expirationTime > now
+      return story.archived !== true && expirationTime > now
     })
 
     if (callback) callback(activeStories)
@@ -218,6 +231,71 @@ export function subscribeToActiveStories(callback, onError, options = {}) {
   return () => {
     if (expirationTimer) clearTimeout(expirationTimer)
     unsubscribeSnapshot()
+  }
+}
+
+/**
+ * Gets stories that are archived manually or expired after the 24 hour window.
+ * @param {{ userId: string, pageSize?: number }} options Archive query options.
+ * @returns {Promise<Array>} Archived stories for the user.
+ */
+export async function getArchivedStories(options = {}) {
+  try {
+    if (!options.userId) {
+      throw new Error('User id is required to get archived stories.')
+    }
+
+    const pageSize = Math.min(Math.max(options.pageSize || 60, 1), 100)
+    const storiesQuery = query(
+      collection(db, 'stories'),
+      where('userId', '==', options.userId),
+      orderBy('createdAt', 'desc'),
+      limit(pageSize)
+    )
+    const snapshot = await getDocs(storiesQuery)
+
+    return snapshot.docs.map(mapStoryDoc).filter(isStoryArchived)
+  } catch (error) {
+    throw new Error(`Failed to get archived stories: ${error.message}`)
+  }
+}
+
+/**
+ * Marks one of the current user's stories as archived before the 24 hour expiry.
+ * @param {string} storyId Firestore story id.
+ * @param {string} userId Firebase Auth user id that owns the story.
+ * @returns {Promise<{archived: boolean}>} Archive status.
+ */
+export async function archiveStory(storyId, userId) {
+  try {
+    if (!storyId || !userId) {
+      throw new Error('Story id and user id are required to archive a story.')
+    }
+
+    const storyRef = doc(db, 'stories', storyId)
+
+    await runTransaction(db, async (transaction) => {
+      const storySnap = await transaction.get(storyRef)
+
+      if (!storySnap.exists()) {
+        throw new Error('Story was not found.')
+      }
+
+      if (storySnap.data().userId !== userId) {
+        throw new Error('Only the owner can archive this story.')
+      }
+
+      transaction.update(storyRef, {
+        archived: true,
+        archivedAt: serverTimestamp(),
+        archivedBy: userId,
+        updatedAt: serverTimestamp(),
+      })
+    })
+
+    return { archived: true }
+  } catch (error) {
+    throw new Error(`Failed to archive story: ${error.message}`)
   }
 }
 
