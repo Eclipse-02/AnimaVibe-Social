@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react'
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Modal, Dimensions } from 'react-native'
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Modal, Dimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { addComment, getComments, toggleLikeComment, addReply, getReplies } from '../../lib/firestore/comments'
 import { getTimeAgo } from '../../lib/firestore/posts'
 import { useAuthStore } from '../../store/authStore'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS, interpolate } from 'react-native-reanimated'
 import { Ionicons } from '@expo/vector-icons'
 import { useThemeColors } from '../../hooks/useTheme'
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller'
 
 const { height } = Dimensions.get('window')
 
 export default function CommentsScreen({ route, navigation }) {
   const colors = useThemeColors()
   const styles = React.useMemo(() => getStyles(colors), [colors])
+  const { progress } = useReanimatedKeyboardAnimation()
   const { postId } = route.params
   const [comment, setComment] = useState('')
   const [comments, setComments] = useState([])
@@ -60,6 +62,10 @@ export default function CommentsScreen({ route, navigation }) {
     height: replyBoxHeight.value,
     opacity: replyBoxHeight.value > 0 ? 1 : 0,
     overflow: 'hidden'
+  }))
+
+  const bottomPaddingStyle = useAnimatedStyle(() => ({
+    paddingBottom: interpolate(progress.value, [0, 1], [48, 8]),
   }))
 
   useLayoutEffect(() => {
@@ -313,7 +319,11 @@ export default function CommentsScreen({ route, navigation }) {
   return (
     <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={handleClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
           <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
           <GestureDetector gesture={gesture}>
             <Animated.View style={[styles.sheetContainer, animatedStyle]}>
@@ -345,7 +355,7 @@ export default function CommentsScreen({ route, navigation }) {
                 )}
               />
 
-              <View style={styles.bottomContainer}>
+              <Animated.View style={[styles.bottomContainer, bottomPaddingStyle]}>
                 {/* Replying To Box */}
                 <Animated.View style={[styles.replyBox, replyBoxStyle]}>
                   <Text style={styles.replyBoxText}>
@@ -387,7 +397,7 @@ export default function CommentsScreen({ route, navigation }) {
                     <Text style={styles.postBtn}>Post</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </Animated.View>
             </Animated.View>
           </GestureDetector>
         </KeyboardAvoidingView>
@@ -511,7 +521,9 @@ const getStyles = (colors) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600'
   },
-  bottomContainer: { backgroundColor: colors.surfaceHigh },
+  bottomContainer: {
+    backgroundColor: colors.surfaceHigh
+  },
   replyBox: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -529,10 +541,10 @@ const getStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
+    paddingBottom: 0,
     borderTopWidth: 0.5,
     borderColor: colors.border,
-    backgroundColor: colors.surfaceHigh,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 16
+    backgroundColor: colors.surfaceHigh
   },
   input: {
     flex: 1,

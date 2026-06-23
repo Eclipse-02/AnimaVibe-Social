@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, Modal, Dimensions } from 'react-native'
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, FlatList, Modal, Dimensions } from 'react-native'
 import { Image } from 'expo-image'
 import { addComment, getComments, toggleLikeComment, addReply, getReplies } from '../lib/firestore/comments'
 import { getTimeAgo } from '../lib/firestore/posts'
 import { useAuthStore } from '../store/authStore'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS, interpolate } from 'react-native-reanimated'
 import { Ionicons } from '@expo/vector-icons'
 import { useThemeColors } from '../hooks/useTheme'
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller'
 
 const { height } = Dimensions.get('window')
 
 export default function StoryCommentsModal({ visible, onClose, storyId, navigation }) {
   const colors = useThemeColors()
   const styles = useMemo(() => getStyles(colors), [colors])
+  const { progress } = useReanimatedKeyboardAnimation()
   const [comment, setComment] = useState('')
   const [comments, setComments] = useState([])
 
@@ -58,6 +60,10 @@ export default function StoryCommentsModal({ visible, onClose, storyId, navigati
     height: replyBoxHeight.value,
     opacity: replyBoxHeight.value > 0 ? 1 : 0,
     overflow: 'hidden'
+  }))
+
+  const bottomPaddingStyle = useAnimatedStyle(() => ({
+    paddingBottom: interpolate(progress.value, [0, 1], [32, 0]),
   }))
 
   useEffect(() => {
@@ -311,120 +317,259 @@ export default function StoryCommentsModal({ visible, onClose, storyId, navigati
   return (
     <Modal animationType="slide" transparent={true} visible={visible} onRequestClose={handleClose}>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior="padding"
+          keyboardVerticalOffset={0}
+        >
           <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={handleClose} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} pointerEvents="box-none">
-            <GestureDetector gesture={gesture}>
-              <Animated.View style={[styles.sheetContainer, animatedStyle]}>
-                <View style={styles.handleContainer}>
-                  <View style={styles.handle} />
-                  <Text style={styles.headerTitle}>Comments</Text>
-                </View>
+          <GestureDetector gesture={gesture}>
+            <Animated.View style={[styles.sheetContainer, animatedStyle]}>
+              <View style={styles.handleContainer}>
+                <View style={styles.handle} />
+                <Text style={styles.headerTitle}>Comments</Text>
+              </View>
 
-                <FlatList
-                  data={comments}
-                  keyExtractor={item => item.id}
-                  contentContainerStyle={styles.listPadding}
-                  showsVerticalScrollIndicator={false}
-                  ListEmptyComponent={() => (
-                    <View style={styles.emptyContainer}>
-                      <Text style={styles.emptyHeader}>No comments yet</Text>
-                      <Text style={styles.emptySub}>Start the conversation</Text>
-                    </View>
-                  )}
-                  renderItem={({ item }) => (
-                    <View>
-                      {renderComment(item)}
-                      {expandedReplies[item.id] && repliesData[item.id] && (
-                        <View>
-                          {repliesData[item.id].map(reply => renderComment(reply, true, item.id))}
-                        </View>
-                      )}
-                    </View>
-                  )}
-                />
-
-                <View style={styles.bottomContainer}>
-                  <Animated.View style={[styles.replyBox, replyBoxStyle]}>
-                    <Text style={styles.replyBoxText}>
-                      Replying to <Text style={{ fontWeight: 'bold' }}>{replyingTo?.username}</Text>
-                    </Text>
-                    <TouchableOpacity onPress={cancelReply}>
-                      <Ionicons name="close" size={20} color={colors.text} />
-                    </TouchableOpacity>
-                  </Animated.View>
-
-                  <View style={styles.inputWrapper}>
-                    {(userProfile?.photoURL || storeUser?.photoURL) ? (
-                      <Image source={{ uri: userProfile?.photoURL || storeUser?.photoURL }} style={styles.smallAvatar} />
-                    ) : (
-                      <View style={[styles.smallAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface }]}>
-                        <Text style={{ color: colors.text, fontSize: 14, fontWeight: 'bold' }}>{currentUsername ? currentUsername.charAt(0).toUpperCase() : '?'}</Text>
+              <FlatList
+                data={comments}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.listPadding}
+                showsVerticalScrollIndicator={false}
+                ListEmptyComponent={() => (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyHeader}>No comments yet</Text>
+                    <Text style={styles.emptySub}>Start the conversation</Text>
+                  </View>
+                )}
+                renderItem={({ item }) => (
+                  <View>
+                    {renderComment(item)}
+                    {expandedReplies[item.id] && repliesData[item.id] && (
+                      <View>
+                        {repliesData[item.id].map(reply => renderComment(reply, true, item.id))}
                       </View>
                     )}
-                    <TextInput
-                      ref={inputRef}
-                      style={styles.input}
-                      placeholder="Add a comment..."
-                      placeholderTextColor={colors.textMuted}
-                      onChangeText={handleTextChange}
-                    >
-                      {replyingTo && comment.startsWith(`@${replyingTo.username} `) ? (
-                        <Text>
-                          <Text style={{ color: colors.brand }}>{`@${replyingTo.username} `}</Text>
-                          <Text style={{ color: colors.text }}>
-                            {renderTextWithMentions(comment.substring(`@${replyingTo.username} `.length), null, true)}
-                          </Text>
-                        </Text>
-                      ) : (
-                        <Text style={{ color: colors.text }}>{renderTextWithMentions(comment, null, true)}</Text>
-                      )}
-                    </TextInput>
-                    <TouchableOpacity onPress={handlePost}>
-                      <Text style={styles.postBtn}>Post</Text>
-                    </TouchableOpacity>
                   </View>
+                )}
+              />
+
+              <Animated.View style={[styles.bottomContainer, bottomPaddingStyle]}>
+                <Animated.View style={[styles.replyBox, replyBoxStyle]}>
+                  <Text style={styles.replyBoxText}>
+                    Replying to <Text style={{ fontWeight: 'bold' }}>{replyingTo?.username}</Text>
+                  </Text>
+                  <TouchableOpacity onPress={cancelReply}>
+                    <Ionicons name="close" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                </Animated.View>
+
+                <View style={styles.inputWrapper}>
+                  {(userProfile?.photoURL || storeUser?.photoURL) ? (
+                    <Image source={{ uri: userProfile?.photoURL || storeUser?.photoURL }} style={styles.smallAvatar} />
+                  ) : (
+                    <View style={[styles.smallAvatar, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.surface }]}>
+                      <Text style={{ color: colors.text, fontSize: 14, fontWeight: 'bold' }}>{currentUsername ? currentUsername.charAt(0).toUpperCase() : '?'}</Text>
+                    </View>
+                  )}
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.input}
+                    placeholder="Add a comment..."
+                    placeholderTextColor={colors.textMuted}
+                    onChangeText={handleTextChange}
+                  >
+                    {replyingTo && comment.startsWith(`@${replyingTo.username} `) ? (
+                      <Text>
+                        <Text style={{ color: colors.brand }}>{`@${replyingTo.username} `}</Text>
+                        <Text style={{ color: colors.text }}>
+                          {renderTextWithMentions(comment.substring(`@${replyingTo.username} `.length), null, true)}
+                        </Text>
+                      </Text>
+                    ) : (
+                      <Text style={{ color: colors.text }}>{renderTextWithMentions(comment, null, true)}</Text>
+                    )}
+                  </TextInput>
+                  <TouchableOpacity onPress={handlePost}>
+                    <Text style={styles.postBtn}>Post</Text>
+                  </TouchableOpacity>
                 </View>
               </Animated.View>
-            </GestureDetector>
-          </KeyboardAvoidingView>
-        </View>
+            </Animated.View>
+          </GestureDetector>
+        </KeyboardAvoidingView>
       </GestureHandlerRootView>
     </Modal>
   )
 }
 
 const getStyles = (colors) => StyleSheet.create({
-  modalContainer: { flex: 1, justifyContent: 'flex-end', paddingBottom: 10 },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.5)' },
-  sheetContainer: { backgroundColor: colors.surfaceHigh, borderTopLeftRadius: 16, borderTopRightRadius: 16, height: height * 0.7, justifyContent: 'space-between' },
-  handleContainer: { alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: colors.border },
-  handle: { width: 36, height: 4, backgroundColor: colors.textSecondary, borderRadius: 2, marginBottom: 10 },
-  headerTitle: { color: colors.text, fontSize: 14, fontWeight: 'bold' },
-  listPadding: { paddingVertical: 16, paddingBottom: 40 },
-  commentRow: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 20 },
-  replyRow: { paddingLeft: 60, marginBottom: 15 },
-  avatar: { width: 36, height: 36, borderRadius: 18 },
-  smallAvatar: { width: 28, height: 28, borderRadius: 14, marginRight: 10 },
-  content: { marginLeft: 12, flex: 1 },
-  commentText: { color: colors.text, fontSize: 14, lineHeight: 20 },
-  username: { fontWeight: 'bold', color: colors.text },
-  actionRow: { flexDirection: 'row', marginTop: 6, gap: 16 },
-  actionSubtext: { color: colors.textMuted, fontSize: 12 },
-  actionText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
-  likeContainer: { alignItems: 'center', marginLeft: 10, marginTop: 2 },
-  heartIcon: { justifyContent: 'center', alignItems: 'center' },
-  commentLikeCount: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
-  viewRepliesBtn: { flexDirection: 'row', alignItems: 'center', marginTop: 12 },
-  replyLine: { width: 30, height: 1, backgroundColor: colors.textSecondary, marginRight: 10 },
-  viewRepliesText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
-  bottomContainer: { backgroundColor: colors.surfaceHigh },
-  replyBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, backgroundColor: colors.surfaceHigh, borderTopWidth: 0.5, borderColor: colors.border },
-  replyBoxText: { color: colors.textSecondary, fontSize: 13 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', padding: 16, borderTopWidth: 0.5, borderColor: colors.border, backgroundColor: colors.surfaceHigh, paddingBottom: Platform.OS === 'ios' ? 25 : 16 },
-  input: { flex: 1, color: colors.text, backgroundColor: colors.surface, borderRadius: 20, paddingHorizontal: 16, height: 40, fontSize: 14, paddingTop: 10 },
-  postBtn: { color: colors.brand, marginLeft: 12, fontWeight: 'bold' },
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 40, paddingHorizontal: 20 },
-  emptyHeader: { color: colors.text, fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
-  emptySub: { color: colors.textMuted, fontSize: 14 }
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end'
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)'
+  },
+  sheetContainer: {
+    backgroundColor: colors.surfaceHigh,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    height: height * 0.7,
+    justifyContent: 'space-between'
+  },
+  handleContainer: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.textSecondary,
+    borderRadius: 2,
+    marginBottom: 10
+  },
+  headerTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: 'bold'
+  },
+  listPadding: {
+    paddingVertical: 16,
+    paddingBottom: 40
+  },
+  commentRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 20
+  },
+  replyRow: {
+    paddingLeft: 60,
+    marginBottom: 15
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18
+  },
+  smallAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 10
+  },
+  content: {
+    marginLeft: 12,
+    flex: 1
+  },
+  commentText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20
+  },
+  username: {
+    fontWeight: 'bold',
+    color: colors.text
+  },
+  actionRow: {
+    flexDirection: 'row',
+    marginTop: 6,
+    gap: 16
+  },
+  actionSubtext: {
+    color: colors.textMuted,
+    fontSize: 12
+  },
+  actionText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  likeContainer: {
+    alignItems: 'center',
+    marginLeft: 10,
+    marginTop: 2
+  },
+  heartIcon: {
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  commentLikeCount: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2
+  },
+  viewRepliesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12
+  },
+  replyLine: {
+    width: 30,
+    height: 1,
+    backgroundColor: colors.textSecondary,
+    marginRight: 10
+  },
+  viewRepliesText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  bottomContainer: {
+    backgroundColor: colors.surfaceHigh  
+  },
+  replyBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: colors.surfaceHigh,
+    borderTopWidth: 0.5,
+    borderColor: colors.border
+  },
+  replyBoxText: {
+    color: colors.textSecondary,
+    fontSize: 13
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderTopWidth: 0.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceHigh
+  },
+  input: {
+    flex: 1,
+    color: colors.text,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    height: 40,
+    fontSize: 14,
+    paddingTop: 10
+  },
+  postBtn: {
+    color: colors.brand,
+    marginLeft: 12,
+    fontWeight: 'bold'
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 40,
+    paddingHorizontal: 20
+  },
+  emptyHeader: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8
+  },
+  emptySub: {
+    color: colors.textMuted,
+    fontSize: 14
+  }
 })
