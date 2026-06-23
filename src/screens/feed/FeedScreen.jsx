@@ -11,7 +11,7 @@ import { subscribeToFeedPosts } from '../../lib/firestore/posts';
 import { useThemeColors } from '../../hooks/useTheme';
 import { useAuthStore } from '../../store/authStore';
 
-export default function FeedScreen({ navigation }) {
+export default function FeedScreen({ navigation, route }) {
   const user = useAuthStore((state) => state.user);
   const userProfile = useAuthStore((state) => state.userProfile);
   const colors = useThemeColors();
@@ -56,6 +56,13 @@ export default function FeedScreen({ navigation }) {
       unsubscribeStories();
     };
   }, []);
+
+  useEffect(() => {
+    if (route.params?.showToast) {
+      showActionToast(route.params.showToast);
+      navigation.setParams({ showToast: undefined });
+    }
+  }, [route.params?.showToast]);
 
   const otherUserStories = React.useMemo(() => {
     const map = new Map();

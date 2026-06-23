@@ -3,10 +3,6 @@
 # vscode
 .vscode/
 
-# google services config
-google-services.json
-GoogleService-Info.plist
-
 # dependencies
 node_modules/
 

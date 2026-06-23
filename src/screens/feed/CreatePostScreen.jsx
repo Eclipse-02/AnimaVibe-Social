@@ -1,11 +1,12 @@
 import React, { useState } from 'react'
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Image, ScrollView, Alert, ActivityIndicator, Switch, Keyboard } from 'react-native'
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Image, ScrollView, ActivityIndicator, Switch, Keyboard } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import { Feather } from '@expo/vector-icons'
 import { createPost } from '../../lib/firestore/posts'
 import { useAuthStore } from '../../store/authStore'
 import { useThemeColors } from '../../hooks/useTheme'
+import ConfirmationModal from '../../components/ui/ConfirmationModal'
 
 export default function CreatePostScreen({ navigation }) {
   const user = useAuthStore((state) => state.user)
@@ -18,22 +19,91 @@ export default function CreatePostScreen({ navigation }) {
   const colors = useThemeColors()
   const styles = React.useMemo(() => getStyles(colors), [colors])
 
+  const [modal, setModal] = useState({ visible: false, type: null })
+
+  const openModal = (type) => setModal({ visible: true, type })
+  const closeModal = () => setModal({ visible: false, type: null })
+
+  const getModalProps = () => {
+    switch (modal.type) {
+      case 'selectPhoto':
+        return {
+          title: 'Select Photo',
+          message: 'Where do you want to take the photo from?',
+          cancelLabel: 'Camera',
+          confirmLabel: 'Gallery',
+          iconName: 'image-outline',
+          onCancel: () => { closeModal(); takePhoto() },
+          onConfirm: () => { closeModal(); pickImage() },
+        }
+      case 'cameraPermission':
+        return {
+          title: 'Permission Denied',
+          message: 'The application needs camera access to take photos!',
+          cancelLabel: 'Dismiss',
+          confirmLabel: 'Open Settings',
+          iconName: 'camera-outline',
+          destructive: true,
+          onCancel: closeModal,
+          onConfirm: closeModal,
+        }
+      case 'galleryPermission':
+        return {
+          title: 'Permission Denied',
+          message: 'The application needs gallery access to pick photos!',
+          cancelLabel: 'Dismiss',
+          confirmLabel: 'Open Settings',
+          iconName: 'images-outline',
+          destructive: true,
+          onCancel: closeModal,
+          onConfirm: closeModal,
+        }
+      case 'noImage':
+        return {
+          title: 'No Image',
+          message: 'You must select an image first!',
+          cancelLabel: 'Cancel',
+          confirmLabel: 'OK',
+          iconName: 'image-outline',
+          destructive: true,
+          onCancel: closeModal,
+          onConfirm: closeModal,
+        }
+      case 'notLoggedIn':
+        return {
+          title: 'Access Denied',
+          message: 'You must be logged in to create a post.',
+          cancelLabel: 'Cancel',
+          confirmLabel: 'OK',
+          iconName: 'person-outline',
+          destructive: true,
+          onCancel: closeModal,
+          onConfirm: closeModal,
+        }
+      case 'error':
+        return {
+          title: 'Failed',
+          message: modal.message || 'An error occurred while creating the post.',
+          cancelLabel: 'Dismiss',
+          confirmLabel: 'Retry',
+          iconName: 'alert-circle-outline',
+          destructive: true,
+          onCancel: closeModal,
+          onConfirm: () => { closeModal(); handleShare() },
+        }
+      default:
+        return null
+    }
+  }
+
   const selectImageSource = () => {
-    Alert.alert(
-      'Select Photo',
-      'Where do you want to take the photo from?',
-      [
-        { text: 'Camera', onPress: takePhoto },
-        { text: 'Gallery', onPress: pickImage },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    )
+    openModal('selectPhoto')
   }
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'The application needs camera access to take photos!')
+      openModal('cameraPermission')
       return
     }
 
@@ -51,7 +121,7 @@ export default function CreatePostScreen({ navigation }) {
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (status !== 'granted') {
-      Alert.alert('Permission Denied', 'The application needs gallery access to take photos!')
+      openModal('galleryPermission')
       return
     }
 
@@ -69,12 +139,12 @@ export default function CreatePostScreen({ navigation }) {
 
   const handleShare = async () => {
     if (!image) {
-      Alert.alert('Warning', 'You must select an image first!')
+      openModal('noImage')
       return
     }
 
     if (!user?.uid) {
-      Alert.alert('Access Denied', 'You must be logged in to create a post.')
+      openModal('notLoggedIn')
       return
     }
 
@@ -95,23 +165,18 @@ export default function CreatePostScreen({ navigation }) {
       setFbSwitch(false)
       setTwitterSwitch(false)
 
-      Alert.alert('Success', 'Your post has been shared successfully!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            if (navigation.canGoBack()) {
-              navigation.goBack()
-            }
-          }
-        }
-      ])
+      if (navigation.canGoBack()) {
+        navigation.navigate('FeedTab', { showToast: 'Post shared successfully!' })
+      }
     } catch (error) {
       console.error(error)
-      Alert.alert('Failed', 'An error occurred: ' + error.message)
+      setModal({ visible: true, type: 'error', message: error.message })
     } finally {
       setIsSubmitting(false)
     }
   }
+
+  const modalProps = getModalProps()
 
   const renderCaptionWithHashtags = (text) => {
     if (!text) return null;
@@ -250,6 +315,14 @@ export default function CreatePostScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
+
+      {modalProps && (
+        <ConfirmationModal
+          visible={modal.visible}
+          {...modalProps}
+          isLoading={isSubmitting && modal.type === 'success'}
+        />
+      )}
     </SafeAreaView>
   )
 }
