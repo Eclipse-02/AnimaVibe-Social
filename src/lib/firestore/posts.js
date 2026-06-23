@@ -22,6 +22,12 @@ import { db, storage } from '../../config/firebase'
 import { createLikeNotification } from './notifications'
 import { CACHE_KEYS, getOfflineCache, setOfflineCache } from './offlineCache'
 
+/**
+ * Derives the file extension and MIME content-type for a post image uri.
+ * Falls back to JPEG when the extension cannot be determined or is unsupported.
+ * @param {string} imageUri Local file uri or remote URL of the image.
+ * @returns {{ extension: string, contentType: string }}
+ */
 function getImageMetadata(imageUri) {
   const extensionMatch = String(imageUri).split('?')[0].match(/\.([a-zA-Z0-9]+)$/)
   const rawExtension = extensionMatch?.[1]?.toLowerCase()
@@ -35,6 +41,13 @@ function getImageMetadata(imageUri) {
   }
 }
 
+/**
+ * Uploads a post image to Firebase Storage and returns its public URL.
+ * Remote URLs (http/https) are returned as-is without re-uploading.
+ * @param {string} userId Owner uid, used to namespace the storage path.
+ * @param {string} imageUri Local file uri or remote URL of the image.
+ * @returns {Promise<{ imageUrl: string, imagePath: string|null, storageRef: import('firebase/storage').StorageReference|null }>}
+ */
 async function uploadPostImage(userId, imageUri) {
   if (/^https?:\/\//i.test(imageUri)) {
     return { imageUrl: imageUri, imagePath: null, storageRef: null }
@@ -97,6 +110,11 @@ function formatLikesCount(count = 0) {
   return String(count)
 }
 
+/**
+ * Normalizes a raw post document into a display-friendly post object.
+ * @param {import('firebase/firestore').QueryDocumentSnapshot} postDoc
+ * @returns {Object}
+ */
 function mapPostDoc(postDoc) {
   const data = postDoc.data()
   const imageUrl = data.imageUrl || data.image || ''
@@ -116,6 +134,11 @@ function mapPostDoc(postDoc) {
   }
 }
 
+/**
+ * Normalizes a raw feed document into a post object carrying like/bookmark arrays.
+ * @param {import('firebase/firestore').QueryDocumentSnapshot} postDoc
+ * @returns {Object}
+ */
 function mapFeedDoc(postDoc) {
   const data = postDoc.data()
   const likesCount = data.likesCount || 0
@@ -135,6 +158,12 @@ function mapFeedDoc(postDoc) {
   }
 }
 
+/**
+ * Checks whether a post document should appear in the feed
+ * (has a creation date and is not archived).
+ * @param {import('firebase/firestore').QueryDocumentSnapshot} postDoc
+ * @returns {boolean}
+ */
 function isPostVisible(postDoc) {
   return postDoc.data().createdAt !== null && postDoc.data().archived !== true
 }
@@ -160,10 +189,12 @@ export async function searchPosts(searchTerm, options = {}) {
     )
     const snapshot = await getDocs(postsQuery)
 
-    return snapshot.docs.map((postDoc) => ({
-      ...mapFeedDoc(postDoc),
-      type: 'post',
-    }))
+    return snapshot.docs
+      .filter(isPostVisible) // excludes archived === true and createdAt === null
+      .map((postDoc) => ({
+        ...mapFeedDoc(postDoc),
+        type: 'post',
+      }))
   } catch (error) {
     throw new Error(`Failed to search posts: ${error.message}`)
   }
@@ -172,6 +203,10 @@ export async function searchPosts(searchTerm, options = {}) {
 /**
  * Subscribes to the feed and emits the last AsyncStorage copy before Firestore.
  * This keeps the native feed usable when the app starts without a connection.
+ *
+ * @param {(posts: Object[], meta: { fromCache: boolean, hasPendingWrites?: boolean, savedAt?: number }) => void} onData Emitted feed posts with source metadata.
+ * @param {(error: Error) => void} [onError] Optional error callback.
+ * @returns {() => void} Unsubscribe function that tears down the listener.
  */
 export function subscribeToFeedPosts(onData, onError = console.error) {
   let isActive = true
@@ -391,6 +426,45 @@ export async function archivePost(postId, userId) {
 }
 
 /**
+ * Unarchives a previously archived post, making it visible again in the feed and profile grid.
+ * @param {string} postId Firestore post id.
+ * @param {string} userId Firebase Auth user id that owns the post.
+ * @returns {Promise<{archived: boolean}>} Archive status after the operation.
+ */
+export async function unarchivePost(postId, userId) {
+  try {
+    if (!postId || !userId) {
+      throw new Error('Post id and user id are required to unarchive a post.')
+    }
+
+    const postRef = doc(db, 'posts', postId)
+
+    await runTransaction(db, async (transaction) => {
+      const postSnap = await transaction.get(postRef)
+
+      if (!postSnap.exists()) {
+        throw new Error('Post was not found.')
+      }
+
+      if (postSnap.data().userId !== userId) {
+        throw new Error('Only the owner can unarchive this post.')
+      }
+
+      transaction.update(postRef, {
+        archived: false,
+        archivedAt: null,
+        archivedBy: null,
+        updatedAt: serverTimestamp(),
+      })
+    })
+
+    return { archived: false }
+  } catch (error) {
+    throw new Error(`Failed to unarchive post: ${error.message}`)
+  }
+}
+
+/**
  * Deletes one of the current user's posts and removes its uploaded image when possible.
  * @param {string} postId Firestore post id.
  * @param {string} userId Firebase Auth user id that owns the post.
@@ -442,7 +516,8 @@ export async function deletePost(postId, userId) {
  * Likes or unlikes a post for the current user.
  * @param {string} postId Firestore post id.
  * @param {string} userId Firebase Auth user id.
- * @returns {Promise<Object>} Updated like status.
+ * @param {{ username?: string, displayName?: string, userPhoto?: string, photoURL?: string, avatar?: string }} [actor] Snapshot of the acting user used to build the like notification.
+ * @returns {Promise<{ liked: boolean, likesCount: number }>} Updated like status.
  */
 export async function toggleLikePost(postId, userId, actor = {}) {
   try {

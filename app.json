@@ -42,6 +42,12 @@
         }
       ],
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "832184ea-2b12-482b-b127-bba89089f58c"
+      }
+    },
+    "owner": "eclipse-02"
   }
 }

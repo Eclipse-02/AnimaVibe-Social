@@ -18,6 +18,11 @@ import {
 import { db } from '../../config/firebase'
 import { createCommentNotification } from './notifications'
 
+/**
+ * Maps a comment document snapshot into a plain object.
+ * @param {import('firebase/firestore').QueryDocumentSnapshot} commentDoc
+ * @returns {Object}
+ */
 function mapCommentDoc(commentDoc) {
   return {
     id: commentDoc.id,
@@ -28,8 +33,8 @@ function mapCommentDoc(commentDoc) {
 /**
  * Adds a comment to a post or story and increments its comment counter.
  * @param {string} postId Firestore post/story id.
- * @param {Object} comment Comment payload.
- * @param {string} collectionName Parent collection name ('posts' or 'stories').
+ * @param {{ userId: string, username?: string, userPhoto?: string, avatar?: string, text: string }} comment Comment payload.
+ * @param {string} [collectionName='posts'] Parent collection name ('posts' or 'stories').
  * @returns {Promise<Object>} Created comment with generated id.
  */
 export async function addComment(postId, comment = {}, collectionName = 'posts') {
@@ -95,9 +100,9 @@ export async function addComment(postId, comment = {}, collectionName = 'posts')
 /**
  * Gets comments for a post/story with cursor pagination.
  * @param {string} postId Firestore post/story id.
- * @param {Object} options Pagination options.
- * @param {string} collectionName Parent collection name ('posts' or 'stories').
- * @returns {Promise<Object>} Comments, next cursor, and hasMore flag.
+ * @param {{ pageSize?: number, lastDoc?: import('firebase/firestore').DocumentSnapshot }} [options] Pagination options.
+ * @param {string} [collectionName='posts'] Parent collection name ('posts' or 'stories').
+ * @returns {Promise<{ comments: Object[], lastDoc: import('firebase/firestore').DocumentSnapshot|null, hasMore: boolean }>}
  */
 export async function getComments(postId, options = {}, collectionName = 'posts') {
   try {
@@ -135,8 +140,8 @@ export async function getComments(postId, options = {}, collectionName = 'posts'
  * @param {string} postId Firestore post/story id.
  * @param {string} commentId Firestore comment id.
  * @param {string} userId Firebase Auth user id.
- * @param {string} collectionName Parent collection name ('posts' or 'stories').
- * @returns {Promise<Object>} Updated like status.
+ * @param {string} [collectionName='posts'] Parent collection name ('posts' or 'stories').
+ * @returns {Promise<{ liked: boolean, likesCount: number }>} Updated like status.
  */
 export async function toggleLikeComment(postId, commentId, userId, collectionName = 'posts') {
   try {
@@ -182,8 +187,9 @@ export async function toggleLikeComment(postId, commentId, userId, collectionNam
  * Adds a reply to a specific comment.
  * @param {string} postId Firestore post/story id.
  * @param {string} commentId Firestore comment id.
- * @param {Object} reply Reply payload.
- * @param {string} collectionName Parent collection name ('posts' or 'stories').
+ * @param {{ userId: string, username?: string, userPhoto?: string, avatar?: string, text: string }} reply Reply payload.
+ * @param {string} [collectionName='posts'] Parent collection name ('posts' or 'stories').
+ * @returns {Promise<Object>} Created reply with generated id.
  */
 export async function addReply(postId, commentId, reply = {}, collectionName = 'posts') {
   try {
@@ -230,7 +236,8 @@ export async function addReply(postId, commentId, reply = {}, collectionName = '
  * Fetches replies for a specific comment.
  * @param {string} postId Firestore post/story id.
  * @param {string} commentId Firestore comment id.
- * @param {string} collectionName Parent collection name ('posts' or 'stories').
+ * @param {string} [collectionName='posts'] Parent collection name ('posts' or 'stories').
+ * @returns {Promise<Object[]>} Matching reply documents.
  */
 export async function getReplies(postId, commentId, collectionName = 'posts') {
   try {

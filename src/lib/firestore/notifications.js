@@ -1,4 +1,5 @@
 import { Platform } from 'react-native'
+import messaging from '@react-native-firebase/messaging'
 import * as ExpoNotifications from 'expo-notifications'
 import {
   addDoc,
@@ -21,10 +22,21 @@ import { db } from '../../config/firebase'
 
 const NOTIFICATIONS_COLLECTION = 'notifications'
 
+/**
+ * Builds a URL-safe document id for a device token.
+ * @param {string} token Raw push token.
+ * @returns {string}
+ */
 function getTokenDocId(token) {
   return encodeURIComponent(token)
 }
 
+/**
+ * Builds a default human-readable message for a notification type.
+ * @param {string} type Notification type ('like', 'comment', 'follow', ...).
+ * @param {string} [actorName='Someone'] Display name of the acting user.
+ * @returns {string}
+ */
 function buildNotificationMessage(type, actorName = 'Someone') {
   if (type === 'like') {
     return `${actorName} liked your post.`
@@ -41,6 +53,10 @@ function buildNotificationMessage(type, actorName = 'Someone') {
   return 'You have a new notification.'
 }
 
+/**
+ * Installs the global expo-notifications handler that controls how
+ * incoming notifications are presented while the app is foregrounded.
+ */
 export function setupNotificationHandler() {
   ExpoNotifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -52,6 +68,11 @@ export function setupNotificationHandler() {
   })
 }
 
+/**
+ * Schedules a local notification that fires immediately.
+ * @param {{ title?: string, body?: string, message?: string, type?: string, actorName?: string, data?: Object }} notification Local notification payload.
+ * @returns {Promise<string>} Scheduled notification id.
+ */
 export async function scheduleLocalNotification(notification = {}) {
   const title = notification.title || 'AnimaVibe'
   const body =
@@ -69,6 +90,12 @@ export async function scheduleLocalNotification(notification = {}) {
   })
 }
 
+/**
+ * Requests notification permission, obtains the device push token and
+ * persists it under the user's profile for later FCM delivery.
+ * @param {string} userId Firebase Auth user id.
+ * @returns {Promise<string>} Registered push token.
+ */
 export async function registerDeviceForPushNotifications(userId) {
   try {
     if (!userId) {
@@ -112,6 +139,12 @@ export async function registerDeviceForPushNotifications(userId) {
   }
 }
 
+/**
+ * Persists (or merges) a device token under the user's profile so the server can target pushes.
+ * @param {string} userId Firebase Auth user id.
+ * @param {{ token: string, provider?: string, platform?: string }} device Device descriptor.
+ * @returns {Promise<Object>} Stored token payload.
+ */
 export async function saveDeviceToken(userId, device = {}) {
   try {
     if (!userId || !device.token) {
@@ -141,6 +174,12 @@ export async function saveDeviceToken(userId, device = {}) {
   }
 }
 
+/**
+ * Marks a previously registered device token as disabled.
+ * @param {string} userId Firebase Auth user id.
+ * @param {string} token Push token to disable.
+ * @returns {Promise<void>}
+ */
 export async function disableDeviceToken(userId, token) {
   try {
     if (!userId || !token) {
@@ -159,6 +198,12 @@ export async function disableDeviceToken(userId, token) {
   }
 }
 
+/**
+ * Creates a notification document and skips self-notifications
+ * (when recipient and actor are the same user).
+ * @param {{ recipientId: string, actorId?: string, actorName?: string, actorPhoto?: string, type: string, entityType?: string, entityId?: string, postId?: string, commentId?: string, message?: string }} notification Notification payload.
+ * @returns {Promise<Object|null>} Created notification, or null when it would target the actor.
+ */
 export async function createNotification(notification = {}) {
   try {
     if (!notification.recipientId) {
@@ -205,6 +250,12 @@ export async function createNotification(notification = {}) {
   }
 }
 
+/**
+ * Builds and persists a 'like' notification for the post owner.
+ * @param {{ id: string, userId: string }} post Liked post.
+ * @param {{ userId: string, username?: string, userPhoto?: string }} actor Acting user.
+ * @returns {Promise<Object|null>}
+ */
 export function createLikeNotification(post, actor = {}) {
   return createNotification({
     recipientId: post.userId,
@@ -218,6 +269,12 @@ export function createLikeNotification(post, actor = {}) {
   })
 }
 
+/**
+ * Builds and persists a 'comment' notification for the post owner.
+ * @param {{ id: string, userId: string }} post Commented post.
+ * @param {{ id: string, userId: string, username?: string, userPhoto?: string }} comment Comment that was added.
+ * @returns {Promise<Object|null>}
+ */
 export function createCommentNotification(post, comment = {}) {
   return createNotification({
     recipientId: post.userId,
@@ -232,6 +289,12 @@ export function createCommentNotification(post, comment = {}) {
   })
 }
 
+/**
+ * Builds and persists a 'follow' notification for the followed user.
+ * @param {string} targetUserId User being followed (notification recipient).
+ * @param {{ userId: string, username?: string, userPhoto?: string }} actor Acting user.
+ * @returns {Promise<Object|null>}
+ */
 export function createFollowNotification(targetUserId, actor = {}) {
   return createNotification({
     recipientId: targetUserId,
@@ -244,6 +307,12 @@ export function createFollowNotification(targetUserId, actor = {}) {
   })
 }
 
+/**
+ * Gets notifications for a recipient with cursor pagination.
+ * @param {string} userId Recipient user id.
+ * @param {{ pageSize?: number, lastDoc?: import('firebase/firestore').DocumentSnapshot }} [options] Pagination options.
+ * @returns {Promise<{ notifications: Object[], lastDoc: import('firebase/firestore').DocumentSnapshot|null, hasMore: boolean }>}
+ */
 export async function getNotifications(userId, options = {}) {
   try {
     if (!userId) {
@@ -452,4 +521,119 @@ export async function createStoryNotification(story, followers = [], actor = {})
   } catch (error) {
     console.error('Failed to create story notifications:', error);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FCM lifecycle — call once per sign-in, call the returned teardown on sign-out
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Initialises FCM for the signed-in user:
+ *  1. Requests notification permission (Android 13+ / iOS)
+ *  2. Gets the FCM registration token and saves it to Firestore
+ *  3. Subscribes to foreground messages → shows a local notification
+ *  4. Subscribes to token-refresh events to keep Firestore up to date
+ *
+ * @param {string} userId   Firebase Auth uid of the signed-in user.
+ * @param {Function} [onNotificationOpen]  Optional callback fired when the user
+ *        taps a notification while the app is backgrounded. Receives the
+ *        RemoteMessage object.
+ * @returns {() => void} Teardown function — call it on sign-out.
+ */
+export async function initFCM(userId, onNotificationOpen) {
+  if (!userId) return () => {}
+
+  const cleanups = []
+
+  try {
+    let authStatus
+    try {
+      authStatus = await messaging().requestPermission()
+    } catch (err) {
+      // If this throws with "SERVICE_NOT_FOUND" / "null is not an object",
+      // the @react-native-firebase native module isn't linked into the build.
+      console.error('[FCM] requestPermission() threw:', err?.code || err?.message || err)
+      return () => {}
+    }
+
+    console.log('[FCM] Permission status:', authStatus)
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL
+
+    if (!enabled) {
+      console.warn('[FCM] Notification permission not granted — getToken skipped.')
+      return () => {}
+    }
+
+    if (Platform.OS === 'android') {
+      await ExpoNotifications.setNotificationChannelAsync('default', {
+        name: 'AnimaVibe',
+        importance: ExpoNotifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#a855f7',
+      })
+    }
+
+    let token
+    try {
+      token = await messaging().getToken()
+    } catch (err) {
+      // This is the line that decides whether a push can ever be delivered.
+      // Common codes: SERVICE_NOT_FOUND (Firebase not initialised natively),
+      // INVALID_SENDER, or a network/runtime error.
+      console.error('[FCM] getToken() FAILED:', err?.code || err?.message || err)
+      return () => {}
+    }
+
+    if (token) {
+      try {
+        await saveDeviceToken(userId, {
+          token,
+          provider: 'fcm',
+          platform: Platform.OS,
+        })
+        console.log('[FCM] Token saved to Firestore for user', userId)
+      } catch (err) {
+        console.error('[FCM] saveDeviceToken() FAILED:', err?.message || err)
+      }
+    }
+
+    const unsubRefresh = messaging().onTokenRefresh(async (newToken) => {
+      await saveDeviceToken(userId, {
+        token: newToken,
+        provider: 'fcm',
+        platform: Platform.OS,
+      }).catch(err => console.warn('[FCM] Could not save refreshed token:', err))
+    })
+    cleanups.push(unsubRefresh)
+
+    const unsubForeground = messaging().onMessage(async (remoteMessage) => {
+      const { notification, data } = remoteMessage
+      if (!notification) return
+
+      await scheduleLocalNotification({
+        title: notification.title || 'AnimaVibe',
+        body: notification.body || '',
+        data: data || {},
+      }).catch(err => console.warn('[FCM] Could not show local notification:', err))
+    })
+    cleanups.push(unsubForeground)
+
+    if (typeof onNotificationOpen === 'function') {
+      // App opened from background by tapping a notification
+      const unsubBackground = messaging().onNotificationOpenedApp((remoteMessage) => {
+        if (remoteMessage) onNotificationOpen(remoteMessage)
+      })
+      cleanups.push(unsubBackground)
+
+      // App launched from quit state by tapping a notification
+      const initialMessage = await messaging().getInitialNotification()
+      if (initialMessage) onNotificationOpen(initialMessage)
+    }
+  } catch (err) {
+    console.error('[FCM] initFCM error:', err)
+  }
+
+  return () => cleanups.forEach(fn => fn())
 }

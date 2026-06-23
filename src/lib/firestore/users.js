@@ -84,7 +84,7 @@ export async function getUserProfile(uid) {
 /**
  * Finds user profiles by username prefix.
  * @param {string} searchTerm Username prefix, with or without a leading @.
- * @param {Object} options Search options.
+ * @param {{ limit?: number, excludeUserId?: string }} [options] Search options.
  * @returns {Promise<Object[]>} Matching user profiles.
  */
 export async function searchUsers(searchTerm, options = {}) {
@@ -149,7 +149,8 @@ export async function updateUserProfile(uid, updates = {}) {
  * Follows another user and updates both profile counters atomically.
  * @param {string} currentUserId User who follows.
  * @param {string} targetUserId User being followed.
- * @returns {Promise<Object>} Follow status.
+ * @param {{ username?: string, displayName?: string, userPhoto?: string, photoURL?: string, avatar?: string }} [actor] Snapshot of the acting user used to build the follow notification.
+ * @returns {Promise<{ following: boolean }>} Follow status.
  */
 export async function followUser(currentUserId, targetUserId, actor = {}) {
   try {

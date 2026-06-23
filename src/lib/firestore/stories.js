@@ -22,6 +22,12 @@ import { createStoryNotification, createLikeNotification } from './notifications
 
 const STORY_LIFETIME_MS = 24 * 60 * 60 * 1000
 
+/**
+ * Derives media type, file extension and MIME content-type from a story media url.
+ * @param {string} mediaUrl Local file uri or remote URL of the media.
+ * @param {'image'|'video'} [requestedType] Explicit media hint when the extension is ambiguous.
+ * @returns {{ mediaType: 'image'|'video', extension: string, contentType: string }}
+ */
 function getMediaMetadata(mediaUrl, requestedType) {
   const extensionMatch = String(mediaUrl).split('?')[0].match(/\.([a-zA-Z0-9]+)$/)
   const rawExtension = extensionMatch?.[1]?.toLowerCase()
@@ -34,6 +40,14 @@ function getMediaMetadata(mediaUrl, requestedType) {
   }
 }
 
+/**
+ * Uploads a story media file to Firebase Storage and returns its public URL.
+ * Remote URLs (http/https) are returned as-is without re-uploading.
+ * @param {string} userId Owner uid, used to namespace the storage path.
+ * @param {string} mediaUrl Local file uri or remote URL of the media.
+ * @param {'image'|'video'} [requestedType] Explicit media hint.
+ * @returns {Promise<{ mediaUrl: string, mediaPath: string|null, mediaType: 'image'|'video', storageRef: import('firebase/storage').StorageReference|null }>}
+ */
 async function uploadStoryMedia(userId, mediaUrl, requestedType) {
   if (/^https?:\/\//i.test(mediaUrl)) {
     return {
@@ -61,6 +75,11 @@ async function uploadStoryMedia(userId, mediaUrl, requestedType) {
   }
 }
 
+/**
+ * Maps a story document snapshot into a plain object.
+ * @param {import('firebase/firestore').QueryDocumentSnapshot} storyDoc
+ * @returns {Object}
+ */
 function mapStoryDoc(storyDoc) {
   return {
     id: storyDoc.id,
@@ -68,11 +87,21 @@ function mapStoryDoc(storyDoc) {
   }
 }
 
+/**
+ * Checks whether a story is still active (not archived and not past expiry).
+ * @param {Object} story Story object with an optional `expiresAt` Timestamp.
+ * @returns {boolean}
+ */
 function isStoryActive(story) {
   const expirationTime = story.expiresAt?.toMillis?.() || 0
   return story.archived !== true && expirationTime > Date.now()
 }
 
+/**
+ * Checks whether a story should be treated as archived (manually archived or expired).
+ * @param {Object} story Story object with an optional `expiresAt` Timestamp.
+ * @returns {boolean}
+ */
 function isStoryArchived(story) {
   const expirationTime = story.expiresAt?.toMillis?.() || 0
   return story.archived === true || expirationTime <= Date.now()
@@ -164,6 +193,7 @@ export async function getActiveStories(options = {}) {
       collection(db, 'stories'),
       where('expiresAt', '>', Timestamp.now()),
       orderBy('expiresAt', 'asc'),
+      orderBy('createdAt', 'desc'),
       limit(pageSize)
     )
     const snapshot = await getDocs(storiesQuery)
@@ -300,10 +330,54 @@ export async function archiveStory(storyId, userId) {
 }
 
 /**
+ * Reposts an archived story by creating a new active story document from the
+ * archived story's media URL and caption. The original archived story is left
+ * unchanged; the new story gets a fresh 24-hour expiry.
+ * @param {string} storyId Firestore story id of the archived story.
+ * @param {string} userId Firebase Auth user id that owns the story.
+ * @returns {Promise<Object>} The newly created story.
+ */
+export async function repostStory(storyId, userId) {
+  try {
+    if (!storyId || !userId) {
+      throw new Error('Story id and user id are required to repost a story.')
+    }
+
+    const storyRef = doc(db, 'stories', storyId)
+    const storySnap = await getDoc(storyRef)
+
+    if (!storySnap.exists()) {
+      throw new Error('Story was not found.')
+    }
+
+    const original = storySnap.data()
+    if (original.userId !== userId) {
+      throw new Error('Only the owner can repost this story.')
+    }
+
+    // createStory handles upload + expiry + notification fan-out
+    const newStory = await createStory({
+      userId,
+      username: original.username,
+      userPhoto: original.userPhoto,
+      // Pass the remote URL directly — uploadStoryMedia skips re-uploading http URLs
+      mediaUrl: original.mediaUrl,
+      mediaType: original.mediaType || 'image',
+      caption: original.caption || '',
+    })
+
+    return newStory
+  } catch (error) {
+    throw new Error(`Failed to repost story: ${error.message}`)
+  }
+}
+
+/**
  * Likes or unlikes a story for the current user.
  * @param {string} storyId Firestore story id.
  * @param {string} userId Firebase Auth user id.
- * @returns {Promise<Object>} Updated like status.
+ * @param {{ username?: string, displayName?: string, userPhoto?: string, photoURL?: string, avatar?: string }} [actor] Snapshot of the acting user used to build the like notification.
+ * @returns {Promise<{ liked: boolean, likesCount: number }>} Updated like status.
  */
 export async function toggleLikeStory(storyId, userId, actor = {}) {
   try {
