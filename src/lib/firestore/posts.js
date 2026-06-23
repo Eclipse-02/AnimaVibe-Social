@@ -16,11 +16,45 @@ import {
   startAt,
   updateDoc,
   where,
-  getDoc,
 } from 'firebase/firestore'
-import { db } from '../../config/firebase'
-import { createLikeNotification, createPostNotification } from './notifications'
+import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { db, storage } from '../../config/firebase'
+import { createLikeNotification } from './notifications'
 import { CACHE_KEYS, getOfflineCache, setOfflineCache } from './offlineCache'
+
+function getImageMetadata(imageUri) {
+  const extensionMatch = String(imageUri).split('?')[0].match(/\.([a-zA-Z0-9]+)$/)
+  const rawExtension = extensionMatch?.[1]?.toLowerCase()
+  const extension = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'].includes(rawExtension)
+    ? rawExtension
+    : 'jpg'
+
+  return {
+    extension,
+    contentType: `image/${extension === 'jpg' ? 'jpeg' : extension}`,
+  }
+}
+
+async function uploadPostImage(userId, imageUri) {
+  if (/^https?:\/\//i.test(imageUri)) {
+    return { imageUrl: imageUri, imagePath: null, storageRef: null }
+  }
+
+  const metadata = getImageMetadata(imageUri)
+  const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const imagePath = `posts/${userId}/${uniqueId}.${metadata.extension}`
+  const storageRef = ref(storage, imagePath)
+  const response = await fetch(imageUri)
+  const blob = await response.blob()
+
+  await uploadBytes(storageRef, blob, { contentType: metadata.contentType })
+
+  return {
+    imageUrl: await getDownloadURL(storageRef),
+    imagePath,
+    storageRef,
+  }
+}
 
 /**
  * Returns a human-readable relative time string from a Firestore Timestamp or Date.
@@ -193,6 +227,8 @@ export function subscribeToFeedPosts(onData, onError = console.error) {
  * @returns {Promise<Object>} Created post with generated id.
  */
 export async function createPost(post = {}) {
+  let uploadedStorageRef = null
+
   try {
     if (!post.userId) {
       throw new Error('User id is required to create a post.')
@@ -202,7 +238,12 @@ export async function createPost(post = {}) {
       throw new Error('Post image url is required.')
     }
 
-    const imageUrl = post.imageUrl || post.image
+    const uploadedImage = await uploadPostImage(
+      post.userId,
+      post.imageUrl || post.image
+    )
+    uploadedStorageRef = uploadedImage.storageRef
+    const imageUrl = uploadedImage.imageUrl
     const userPhoto = post.userPhoto || post.avatar || ''
     const caption = post.caption?.trim() || ''
 
@@ -221,6 +262,7 @@ export async function createPost(post = {}) {
       avatar: userPhoto,
       imageUrl,
       image: imageUrl,
+      imagePath: uploadedImage.imagePath,
       caption,
       tags,
       likesCount: 0,
@@ -235,22 +277,19 @@ export async function createPost(post = {}) {
     const userRef = doc(db, 'users', post.userId)
 
     await runTransaction(db, async (transaction) => {
-      const userSnap = post.userId !== 'anonymous'
-        ? await transaction.get(userRef)
-        : null
+      const userSnapshot = await transaction.get(userRef)
+      if (!userSnapshot.exists()) {
+        throw new Error('User profile was not found.')
+      }
+
+      const userData = userSnapshot.data()
+      const currentPostCount = userData.postCount ?? userData.postsCount ?? 0
 
       transaction.set(postRef, postData)
-
-      if (userSnap) {
-        const userData = userSnap.exists() ? userSnap.data() : {}
-        const currentPostCount = userData.postCount ?? userData.postsCount ?? 0
-
-        transaction.set(userRef, {
-          uid: post.userId,
-          postCount: currentPostCount + 1,
-          updatedAt: serverTimestamp(),
-        }, { merge: true })
-      }
+      transaction.update(userRef, {
+        postCount: currentPostCount + 1,
+        updatedAt: serverTimestamp(),
+      })
     })
 
     return {
@@ -258,6 +297,9 @@ export async function createPost(post = {}) {
       ...postData,
     }
   } catch (error) {
+    if (uploadedStorageRef) {
+      await deleteObject(uploadedStorageRef).catch(() => {})
+    }
     throw new Error(`Failed to create post: ${error.message}`)
   }
 }
